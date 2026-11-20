@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://realtime-copilot.dev/schema/events.v1.json",
+  "title": "EventV1",
+  "description": "RealTime Copilot 有线协议 v1。JSON Schema 是唯一事实来源；TypeScript 类型与 Python Pydantic 模型由 scripts/generate.mjs 生成，C# DTO 手写并由 fixtures 往返测试约束。所有事件共用同一 envelope：v/type/eventId/requestId/ts/payload。",
+  "$defs": {
+    "EventId": {
+      "title": "EventId",
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9_-]{8,64}$",
+      "description": "事件唯一标识；由发送方生成，接收方只用于日志与关联，不承担幂等语义。"
+    },
+    "RequestId": {
+      "title": "RequestId",
+      "type": "string",
+      "pattern": "^req_[A-Za-z0-9_-]{8,64}$",
+      "description": "请求关联标识；响应事件回填同一 requestId。"
+    },
+    "Role": {
+      "title": "Role",
+      "type": "string",
+      "enum": ["ui", "bridge", "audio", "tests"],
+      "description": "连接角色。audio 只能发送音频与控制帧；ui/bridge/tests 只能收发事件。"
+    },
+    "ErrorCode": {
+      "title": "ErrorCode",
+      "type": "string",
+      "enum": [
+        "auth_failed",
+        "auth_timeout",
+        "protocol_version_unsupported",
+        "invalid_envelope",
+        "invalid_payload",
+        "unsupported_event",
+        "invalid_role",
+        "not_implemented",
+        "internal_error"
+      ],
+      "description": "稳定的机器可路由错误码；客户端不得依赖 message 文本。"
+    },
+    "HelloPayload": {
+      "title": "HelloPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token", "role", "clientVersion"],
+      "properties": {
+        "token": { "type": "string", "minLength": 16, "maxLength": 256 },
+        "role": { "$ref": "#/$defs/Role" },
+        "clientVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "SystemReadyPayload": {
+      "title": "SystemReadyPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serverVersion", "protocol", "capabilities"],
+      "properties": {
+        "serverVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "protocol": { "const": 1 },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+          "uniqueItems": true
+        },
+        "sessionId": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "SystemErrorPayload": {
+      "title": "SystemErrorPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "retryable": { "type": "boolean" },
+        "requestId": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "HeartbeatPayload": {
+      "title": "HeartbeatPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nonce": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "AudioStatusPayload": {
+      "title": "AudioStatusPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "since"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["idle", "starting", "capturing", "stopping", "error"]
+        },
+        "source": {
+          "type": ["string", "null"],
+          "enum": ["loopback", "mic", null]
+        },
+        "deviceId": { "type": ["string", "null"], "maxLength": 256 },
+        "since": { "type": "integer", "minimum": 0 },
+        "error": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "LoopbackOptions": {
+      "title": "LoopbackOptions",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deviceId": { "type": ["string", "null"], "maxLength": 256 },
+        "processId": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "MicOptions": {
+      "title": "MicOptions",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "deviceId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "CaptureStartPayload": {
+      "title": "CaptureStartPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loopback", "mic"],
+      "properties": {
+        "loopback": { "$ref": "#/$defs/LoopbackOptions" },
+        "mic": { "$ref": "#/$defs/MicOptions" }
+      }
+    },
+    "CaptureStopPayload": {
+      "title": "CaptureStopPayload",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "HelloEvent": {
+      "title": "HelloEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "hello" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/HelloPayload" }
+      }
+    },
+    "SystemReadyEvent": {
+      "title": "SystemReadyEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "system.ready" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/SystemReadyPayload" }
+      }
+    },
+    "SystemErrorEvent": {
+      "title": "SystemErrorEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "system.error" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/SystemErrorPayload" }
+      }
+    },
+    "PingEvent": {
+      "title": "PingEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "ping" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/HeartbeatPayload" }
+      }
+    },
+    "PongEvent": {
+      "title": "PongEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "pong" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/HeartbeatPayload" }
+      }
+    },
+    "AudioStatusEvent": {
+      "title": "AudioStatusEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "audio.status" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/AudioStatusPayload" }
+      }
+    },
+    "CaptureStartEvent": {
+      "title": "CaptureStartEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "capture.start" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/CaptureStartPayload" }
+      }
+    },
+    "CaptureStopEvent": {
+      "title": "CaptureStopEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "type", "eventId", "ts", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "type": { "const": "capture.stop" },
+        "eventId": { "$ref": "#/$defs/EventId" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "payload": { "$ref": "#/$defs/CaptureStopPayload" }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/HelloEvent" },
+    { "$ref": "#/$defs/SystemReadyEvent" },
+    { "$ref": "#/$defs/SystemErrorEvent" },
+    { "$ref": "#/$defs/PingEvent" },
+    { "$ref": "#/$defs/PongEvent" },
+    { "$ref": "#/$defs/AudioStatusEvent" },
+    { "$ref": "#/$defs/CaptureStartEvent" },
+    { "$ref": "#/$defs/CaptureStopEvent" }
+  ]
+}

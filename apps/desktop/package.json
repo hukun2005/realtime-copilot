@@ -1,0 +1,33 @@
+{
+  "name": "@realtime-copilot/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RealTime Copilot 桌面外壳：Electron 主进程 + Vue3 渲染进程，Phase 1 只展示连接状态",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "prebuild": "pnpm --filter @realtime-copilot/protocol run build",
+    "pretypecheck": "pnpm --filter @realtime-copilot/protocol run build",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "build": "pnpm run build:main && pnpm run build:renderer",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && vue-tsc -p tsconfig.renderer.json --noEmit",
+    "test": "vitest run",
+    "start": "electron .",
+    "smoke": "electron . --smoke"
+  },
+  "dependencies": {
+    "@realtime-copilot/protocol": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-vue": "^6.0.11",
+    "electron": "^45.4.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1",
+    "vue": "^3.5.46",
+    "vue-tsc": "^3.3.14"
+  }
+}

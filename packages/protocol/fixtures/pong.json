@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "type": "pong",
+  "eventId": "evt_01JAY0000000000000000000E",
+  "ts": 1763700000031,
+  "payload": { "nonce": "hb-1" }
+}

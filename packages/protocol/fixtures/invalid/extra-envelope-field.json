@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "type": "ping",
+  "eventId": "evt_01JAY0000000000000000000N",
+  "ts": 1763700000100,
+  "payload": {},
+  "debug": true
+}

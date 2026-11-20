@@ -1,0 +1,21 @@
+{
+  "name": "realtime-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows 实时 AI 会议助手：音频采集、流式 ASR、问题检测、DeepSeek 流式回答、桌面悬浮窗；支持独立运行与 Harness 集成",
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "protocol:generate": "pnpm -C packages/protocol run generate",
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "test:python": "uv run pytest -q",
+    "lint:python": "uv run ruff check .",
+    "test:dotnet": "dotnet test services/audio-capture/tests -c Release --nologo",
+    "e2e": "pwsh -NoProfile -File scripts/e2e-smoke.ps1",
+    "dev:desktop": "pnpm -C apps/desktop run start"
+  }
+}

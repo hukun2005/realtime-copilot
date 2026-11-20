@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "type": "hello",
+  "eventId": "evt_01JAY0000000000000000000P",
+  "ts": 1763700000110,
+  "payload": { "token": "0123456789abcdef", "role": "admin", "clientVersion": "0.1.0" }
+}

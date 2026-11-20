@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "type": "hello",
+  "eventId": "evt_01JAY0000000000000000000A",
+  "requestId": "req_01JAY0000000000000000000A",
+  "ts": 1763700000000,
+  "payload": {
+    "token": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "role": "ui",
+    "clientVersion": "0.1.0",
+    "clientName": "desktop"
+  }
+}

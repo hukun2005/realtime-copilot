@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "type": "audio.status",
+  "eventId": "evt_01JAY0000000000000000000F",
+  "ts": 1763700000040,
+  "payload": {
+    "state": "capturing",
+    "source": "loopback",
+    "deviceId": null,
+    "since": 1763700000000,
+    "error": null
+  }
+}

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>RealtimeCopilot.AudioCapture</RootNamespace>
+    <AssemblyName>audio-capture</AssemblyName>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 测试工程独立编译，避免被主工程默认通配包含。 -->
+    <Compile Remove="tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Phase 2 的 WASAPI 采集实现依赖 NAudio；Phase 1 只用它做设备枚举。 -->
+    <PackageReference Include="NAudio" Version="3.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.15" />
+  </ItemGroup>
+
+</Project>

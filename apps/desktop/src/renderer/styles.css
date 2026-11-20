@@ -1,0 +1,172 @@
+:root {
+  color-scheme: dark;
+  --bg: #101114;
+  --panel: #181a1f;
+  --border: #272a31;
+  --text: #e6e8ee;
+  --muted: #9aa0ad;
+  --ok: #3ecf8e;
+  --warn: #e2b341;
+  --bad: #ef5f5f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mode {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+button:hover {
+  border-color: var(--muted);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.card[data-tone="ok"] {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+}
+
+.card[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+
+.card[data-tone="bad"] {
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
+}
+
+.value {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card[data-tone="ok"] .value {
+  color: var(--ok);
+}
+
+.card[data-tone="warn"] .value {
+  color: var(--warn);
+}
+
+.card[data-tone="bad"] .value {
+  color: var(--bad);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+dd {
+  margin: 0;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.problems {
+  background: color-mix(in srgb, var(--bad) 10%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--bad) 40%, var(--border));
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.problems ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.facts {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.footer {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}

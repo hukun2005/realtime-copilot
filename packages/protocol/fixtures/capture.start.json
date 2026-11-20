@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "type": "capture.start",
+  "eventId": "evt_01JAY0000000000000000000G",
+  "requestId": "req_01JAY0000000000000000000G",
+  "ts": 1763700000050,
+  "payload": {
+    "loopback": { "deviceId": null, "processId": null },
+    "mic": { "enabled": false, "deviceId": null }
+  }
+}

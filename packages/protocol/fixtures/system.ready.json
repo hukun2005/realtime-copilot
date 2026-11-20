@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "type": "system.ready",
+  "eventId": "evt_01JAY0000000000000000000B",
+  "requestId": "req_01JAY0000000000000000000A",
+  "ts": 1763700000010,
+  "payload": {
+    "serverVersion": "0.1.0",
+    "protocol": 1,
+    "capabilities": ["capture", "transcript"],
+    "sessionId": null
+  }
+}

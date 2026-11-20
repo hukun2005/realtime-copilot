@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (core + protocol)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.9'
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Test
+        run: uv run pytest -q
+
+  dotnet:
+    name: .NET (audio-capture)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build services/audio-capture/AudioCapture.csproj -c Release --nologo
+      - name: Test
+        run: dotnet test services/audio-capture/tests/AudioCapture.Tests.csproj -c Release --nologo
+
+  node:
+    name: Node (protocol + desktop)
+    runs-on: ubuntu-latest
+    env:
+      # CI 只编译与类型检查，不启动 Electron；跳过约 250MB 的二进制下载。
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build protocol
+        run: pnpm -C packages/protocol build
+      - name: Protocol tests
+        run: pnpm -C packages/protocol test
+      - name: Typecheck
+        run: pnpm -r --if-present run typecheck
+      - name: Build desktop
+        run: pnpm -C apps/desktop build
+      - name: Desktop tests
+        run: pnpm -C apps/desktop test
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.9'
+      - name: Generated protocol code is in sync with the schema
+        run: |
+          pnpm -C packages/protocol generate
+          git diff --exit-code -- packages/protocol
+
+  windows-e2e:
+    name: Windows end-to-end (core + audio-capture)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.9'
+          enable-cache: true
+      - run: uv sync --frozen
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Real Core + real C# client
+        run: pwsh -NoProfile -File scripts/e2e-smoke.ps1 -Seconds 3

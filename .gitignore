@@ -1,20 +1,32 @@
-# 依赖与构建产物
+# Node / TypeScript
 node_modules/
 dist/
-lib/
-bin/
-obj/
+dist-electron/
+*.tsbuildinfo
+coverage/
+
+# Python
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
+
+# .NET
+bin/
+obj/
+*.user
+TestResults/
 
 # 本地运行产物
 .artifacts/
 *.log
 runtime.json
+*.db
+*.db-wal
+*.db-shm
 
 # 编辑器 / 系统
 .vs/
@@ -23,7 +35,8 @@ runtime.json
 .DS_Store
 Thumbs.db
 
-# 隐私：任何真实会议音频、转写、密钥都不得入库
+# 隐私：真实会议音频、转写、密钥一律不得入库
 secrets.*
 *.wav
 !tests/fixtures/**/*.wav
+!packages/protocol/fixtures/**/*.wav

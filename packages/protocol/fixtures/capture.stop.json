@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "type": "capture.stop",
+  "eventId": "evt_01JAY0000000000000000000H",
+  "requestId": "req_01JAY0000000000000000000H",
+  "ts": 1763700000060,
+  "payload": {}
+}

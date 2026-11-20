@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "copilot-core"
+version = "0.1.0"
+description = "RealTime Copilot 核心服务：WebSocket 事件总线、配置、SQLite 与后续编排能力的宿主"
+requires-python = ">=3.11"
+dependencies = [
+  "copilot-protocol",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.32,<1",
+  "websockets>=13.1,<18",
+  "pydantic>=2.9,<3",
+]
+
+[project.scripts]
+copilot-core = "copilot_core.__main__:main"
+
+[tool.uv.sources]
+copilot-protocol = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/copilot_core"]

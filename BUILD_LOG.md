@@ -97,8 +97,85 @@
 
 Phase 1：建立 `packages/protocol` 的事件 schema 与双端生成、`services/copilot-core` 的 WS 鉴权骨架、`services/audio-capture` 的空客户端、`apps/desktop` 的空窗口，跑通三语言 CI，并记录冷启动与内存基线。
 
+## 2026-11-20 · Phase 1：基础工程
+
+### 环境（本机实测）
+
+Node 24.22.1 · pnpm 11.28.5 · Python 3.13.15 · .NET SDK 10.0.404（运行时 10.0.15）· uv 0.13.9（本机原先未安装，通过 `python -m pip install uv` 补装）。
+`pnpm-workspace` 管理 TS 包；uv workspace 管理 Python；`dotnet` 管理 C#。目标框架选 `net10.0`（本机唯一 SDK，且为 LTS）。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm -C packages/protocol generate` | 生成 `types.ts` 与 `models.py`，无错误 |
+| `pnpm -C packages/protocol test` | 22 passed |
+| `pnpm -C packages/protocol typecheck` | 通过（`tsc` build + test 配置） |
+| `uv sync` | 解析 29 个包，安装 workspace 成员 `copilot-protocol` / `copilot-core` |
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -q` | 77 passed, 1 skipped（Windows 跳过 POSIX `0600` 断言） |
+| `dotnet build services/audio-capture -c Release` | 0 warning / 0 error |
+| `dotnet test services/audio-capture/tests -c Release` | 27 passed |
+| `pnpm -C apps/desktop typecheck` | 通过（tsc + vue-tsc） |
+| `pnpm -C apps/desktop build` | renderer 67.34 kB（gzip 26.58 kB），main 由 tsc 输出 |
+| `pnpm -C apps/desktop test` | 11 passed |
+| `pwsh -File scripts/e2e-smoke.ps1 -Seconds 2` | PASS：Core 健康、客户端 `core ready`、`roles={"audio":1}` |
+| Electron smoke（`electron . --smoke`） | exit 0，输出 `{"smoke":"connected","status":{"phase":"connected","serverVersion":"0.1.0","protocol":1,...}}` |
+
+补充验证：
+
+- `Get-NetTCPConnection -LocalPort <port> -State Listen` → `LocalAddress=127.0.0.1`，确认只监听回环。
+- `runtime.json` 写入日志出现 `hardened:true`，说明 Windows 上 `icacls` 加固成功。
+- 强杀客户端后 Core 日志无 `Exception in ASGI` / `Traceback`（初次实现有，已修复）。
+
+### 交付物
+
+| 路径 | 内容 |
+|---|---|
+| `packages/protocol/` | schema、生成器、TS 类型、Pydantic 模型、运行时编解码、8+5 个 fixtures、22 个测试 |
+| `services/copilot-core/` | FastAPI、WS 鉴权与心跳、配置、日志、SQLite 迁移、安全模块、50 个测试 |
+| `services/audio-capture/` | .NET 10 客户端骨架、协议 DTO、配置、Kestrel 驱动的 27 个测试 |
+| `apps/desktop/` | Electron 主进程、preload、Vue3 渲染进程、状态机、11 个测试 |
+| `scripts/e2e-smoke.ps1` | 真实 Core + 真实 C# 客户端的端到端冒烟 |
+| `.github/workflows/ci.yml` | 4 个作业：python / dotnet / node / windows-e2e |
+| `SECURITY.md` | 信任边界、令牌、ACL 与 DPAPI 取舍、残余风险 |
+
+### 设计决策与偏离
+
+1. **新增错误码 `not_implemented`**：`PLUGIN_API.md` 的 `ErrorCode` 原本只有 8 个值。Phase 1 的 `capture.start` / `capture.stop` / `audio.status` 已定义但未实现，用 `unsupported_event` 会误导（那是"未知事件"）。因此 schema 增加该枚举值，并同步生成双端模型。
+2. **协议生成方式**：TS 用 `json-schema-to-typescript`，Python 用 `datamodel-code-generator`（`uvx` 固定 0.99.0）。C# DTO 手写，用共享 fixtures 做往返约束——没有可靠的 C# JSON Schema 代码生成器能在无额外依赖下保证一致。
+3. **uvicorn WebSocket 实现选 `websockets-sansio`**：`websockets` 实现在 uvicorn 0.54 已弃用；切换后不再出现 `websockets.legacy` 与 `--ws websockets` 的弃用警告。
+4. **`runtime.json` 不加密**：DPAPI 密文与 Electron `safeStorage` 格式不互通，加密会切断三进程共享。改为"用户级目录 + `icacls` + 每次启动轮换令牌 + 回环绑定"，理由写在 `SECURITY.md` §4。
+5. **桌面端不启动 Core**：Phase 1 只"连接"，进程编排属于 Phase 8。桌面端从 `runtime.json` 读地址与令牌，读不到就显示明确错误。
+6. **`runtime.json` 端口可信**：Core 先 `socket.create_server` 拿到真实端口，再交给 uvicorn，避免"写 0 端口再猜"。
+
+### 遇到的问题与修复
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| `HelloPayload` 无 `clientName` 属性 | 生成模型用 snake_case + alias，代码里读了 camelCase | 改读 `client_name` / `client_version`；C# 侧用 `JsonPropertyName` 保持线格式 |
+| `runtime.json` 缺 `wsUrl` | `asdict()` 输出 `ws_url` | `RuntimeInfo.to_json()` 显式映射 camelCase |
+| 强杀客户端时 Core 打 ASGI traceback | 对端消失后 `send`/`close` 抛 `ClientDisconnected`，只捕获了 `WebSocketDisconnect` | 发送与关闭改为 best-effort（捕获后按已关闭处理），接收循环外层增加兜底日志 |
+| `role` 日志输出 `<Role:role>` | 记录的是 Pydantic RootModel | 登录时转成裸字符串 |
+| 打包后 `copilot_core` 导入失败 | hatchling `packages` 指向了 `copilot_core` 而非 `src/copilot_core` | 修正打包路径 |
+| Electron 启动报 `Cannot read properties of undefined (reading 'whenReady')` | 本机环境继承了 `ELECTRON_RUN_AS_NODE=1`，Electron 以 Node 模式运行 | 冒烟前清除该变量；`apps/desktop/README.md` 已注明 |
+| `dotnet test` 找不到 `Fact` | xunit 没有全局 using | 增加 `GlobalUsings.cs` |
+
+### 尚未解决 / 下一阶段前置
+
+- 音频采集完全未实现（Phase 2）：WASAPI 设备级与进程级 loopback、重采样、分帧、二进制帧通道。
+- Core 尚未处理 `role=audio` 的音频帧（当前回 `not_implemented`）。
+- 桌面端还没有悬浮窗形态、托盘与设置页（Phase 6）。
+- `safeStorage` 与 API Key 流程未接入（Phase 5）。
+- CI 首次运行结果需在本轮推送后确认；Windows 作业依赖 GitHub 托管 runner 的 .NET 10 支持。
+
+### 下一步
+
+Phase 2：实现 `IAudioFrameSource` 的 WASAPI 设备级采集（先不做进程级），把 20ms PCM16 帧通过二进制 WebSocket 帧发给 Core，并在 Core 侧统计帧率与丢帧；随后按 U3/U4 在两个 Windows 版本上实测腾讯会议与微信。
+
 ### 变更记录
 
 | 日期 | 变更 |
 |---|---|
 | 2026-11-20 | 初始版本：完成 Phase 0 审查与全部设计文档 |
+| 2026-11-20 | Phase 1：协议、Core、音频骨架、桌面骨架、CI、安全文档 |

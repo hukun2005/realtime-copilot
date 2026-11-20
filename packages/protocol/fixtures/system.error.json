@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "type": "system.error",
+  "eventId": "evt_01JAY0000000000000000000C",
+  "ts": 1763700000020,
+  "payload": {
+    "code": "auth_failed",
+    "message": "invalid token",
+    "retryable": false
+  }
+}
