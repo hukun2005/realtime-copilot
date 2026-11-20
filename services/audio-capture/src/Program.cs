@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RealtimeCopilot.AudioCapture.Audio;
+using RealtimeCopilot.AudioCapture.Control;
 
 namespace RealtimeCopilot.AudioCapture;
 
@@ -67,6 +68,17 @@ internal static class Program
             return 0;
         }
 
+        if (config.Control)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                logger.LogError("control mode requires Windows");
+                return 2;
+            }
+
+            return await RunControlAsync(client, loggerFactory, logger, shutdown.Token).ConfigureAwait(false);
+        }
+
         if (simulation.Enabled)
         {
             return await RunSimulationAsync(client, simulation, loggerFactory, logger, shutdown.Token).ConfigureAwait(false);
@@ -84,6 +96,23 @@ internal static class Program
             DisconnectReason.ClientStopped => 0,
             _ => 4,
         };
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static async Task<int> RunControlAsync(
+        CoreClient client,
+        ILoggerFactory loggerFactory,
+        ILogger logger,
+        CancellationToken shutdownToken)
+    {
+        await using var control = new CaptureControl(client, loggerFactory, logger);
+        client.ControlReceived = control.HandleAsync;
+        logger.LogInformation("control mode ready: waiting for capture.start");
+
+        var reason = await client.RunAsync(shutdownToken).ConfigureAwait(false);
+        await control.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        logger.LogInformation("control session ended: {Reason}", reason);
+        return reason == DisconnectReason.ClientStopped ? 0 : 4;
     }
 
     private static async Task<int> RunSimulationAsync(

@@ -1,4 +1,4 @@
-"""FastAPI 应用装配：``/healthz`` 与 ``/ws/v1/events``。
+"""FastAPI 应用装配：``/healthz``、``/ws/v1/events`` 与采集控制面。
 
 应用本身不负责绑定端口（见 :mod:`copilot_core.runtime`），以便测试直接注入
 配置与临时数据目录。
@@ -11,6 +11,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import JSONResponse
@@ -18,10 +19,12 @@ from fastapi.responses import JSONResponse
 from copilot_protocol import PROTOCOL_VERSION
 
 from .audio import AudioHub
+from .capture import CaptureController
 from .config import AppConfig
 from .logging_setup import get_logger
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
 from .storage import close, open_database
+from .tickets import TicketIssuer
 from .ws.connection import EventConnection
 
 logger = get_logger("copilot_core.app")
@@ -47,6 +50,23 @@ def create_app(
     Returns:
         配置好的应用；``/docs`` 等自动文档已关闭，减少暴露面。
     """
+    ui_connections: set[EventConnection] = set()
+
+    async def broadcast(event: Any) -> None:
+        """把状态事件广播给所有 UI/bridge 连接（尽力而为）。"""
+        for connection in list(ui_connections):
+            try:
+                await connection.send_event(event)
+            except Exception:
+                ui_connections.discard(connection)
+
+    tickets = TicketIssuer(ttl_seconds=config.capture.ticket_ttl_seconds)
+    controller = CaptureController(
+        config=config.capture,
+        tickets=tickets,
+        logger=get_logger("copilot_core.capture"),
+        broadcast=broadcast,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -72,6 +92,7 @@ def create_app(
         try:
             yield
         finally:
+            await controller.shutdown()
             close(database)
             if runtime_path is not None:
                 remove_runtime_file(runtime_path)
@@ -89,6 +110,7 @@ def create_app(
     app.state.roles = {}
     app.state.port = 0
     app.state.audio = AudioHub(config.audio)
+    app.state.capture = controller
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
@@ -104,7 +126,8 @@ def create_app(
             app.state.db.execute("SELECT 1")
         except sqlite3.Error:
             database_ok = False
-        body = {
+        try:
+            body = {
             "status": "ok" if database_ok else "degraded",
             "version": version,
             "protocol": PROTOCOL_VERSION,
@@ -113,33 +136,43 @@ def create_app(
             "connections": int(app.state.connections),
             "roles": dict(app.state.roles),
             "audio": app.state.audio.snapshot(),
-            "database": "ok" if database_ok else "error",
-        }
-        return JSONResponse(body, status_code=200 if database_ok else 503)
+            "capture": controller.snapshot(),
+                "database": "ok" if database_ok else "error",
+            }
+            return JSONResponse(body, status_code=200 if database_ok else 503)
+        except Exception:
+            logger.exception("healthz failed")
+            return JSONResponse({"status": "error", "error": "internal_error"}, status_code=500)
 
     @app.websocket("/ws/v1/events")
     async def events(websocket: WebSocket) -> None:
         """事件通道：一条连接对应一个客户端角色。"""
+
         app.state.connections += 1
-        claimed: dict[str, str] = {}
+        connection: EventConnection | None = None
 
         def on_authenticated(role: str) -> None:
-            claimed["role"] = role
             app.state.roles[role] = app.state.roles.get(role, 0) + 1
+            if role in ("ui", "bridge") and connection is not None:
+                ui_connections.add(connection)
 
+        connection = EventConnection(
+            websocket,
+            config=config,
+            token=token,
+            version=version,
+            logger=logger,
+            on_authenticated=on_authenticated,
+            audio_hub=app.state.audio,
+            capture=controller,
+            tickets=tickets,
+        )
         try:
-            await EventConnection(
-                websocket,
-                config=config,
-                token=token,
-                version=version,
-                logger=logger,
-                on_authenticated=on_authenticated,
-                audio_hub=app.state.audio,
-            ).run()
+            await connection.run()
         finally:
+            ui_connections.discard(connection)
             app.state.connections -= 1
-            role = claimed.get("role")
+            role = connection.role
             if role is not None:
                 app.state.roles[role] = max(0, app.state.roles.get(role, 1) - 1)
 

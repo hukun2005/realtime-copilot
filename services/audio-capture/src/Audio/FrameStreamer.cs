@@ -16,6 +16,7 @@ public sealed class FrameStreamer
     private readonly IAudioFrameSource _source;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, Task> _send;
     private readonly ILogger _logger;
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>创建发送器。</summary>
     /// <param name="source">音频来源。</param>
@@ -34,6 +35,9 @@ public sealed class FrameStreamer
         _send = send;
         _logger = logger;
     }
+
+    /// <summary>采集源已启动（或启动失败）时完成。</summary>
+    public Task Started => _started.Task;
 
     /// <summary>已发送帧数。</summary>
     public uint FramesSent { get; private set; }
@@ -73,6 +77,7 @@ public sealed class FrameStreamer
         try
         {
             await _source.StartAsync(cancellationToken).ConfigureAwait(false);
+            _started.TrySetResult();
             _logger.LogInformation("capture started: source={Source}", _source.Source);
 
             while (!cancellationToken.IsCancellationRequested)
@@ -100,6 +105,7 @@ public sealed class FrameStreamer
         }
         catch (OperationCanceledException)
         {
+            _started.TrySetCanceled(cancellationToken);
             // 正常停止。
         }
         finally

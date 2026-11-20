@@ -43,6 +43,10 @@ export type ErrorCode =
   | 'not_implemented'
   | 'rate_limited'
   | 'internal_error'
+  | 'invalid_state'
+  | 'capture_timeout'
+  | 'sidecar_unavailable'
+  | 'ticket_invalid'
 
 export interface HelloEvent {
   v: 1
@@ -57,6 +61,7 @@ export interface HelloPayload {
   role: Role
   clientVersion: string
   clientName?: string
+  ticket?: string | null
 }
 export interface SystemReadyEvent {
   v: 1
@@ -117,8 +122,10 @@ export interface AudioStatusPayload {
   state: 'idle' | 'starting' | 'capturing' | 'stopping' | 'error'
   source?: 'loopback' | 'mic' | null
   deviceId?: string | null
+  mode?: 'loopback' | 'mic' | 'process' | null
   since: number
   error?: string | null
+  errorCode?: string | null
 }
 export interface CaptureStartEvent {
   v: 1

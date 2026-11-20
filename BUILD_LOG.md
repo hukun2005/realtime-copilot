@@ -284,6 +284,77 @@ Phase 2-B：用 `WasapiLoopbackCapture` 替换 `SimulatedAudioSource`，接入�
 
 Phase 2-C：进程级 loopback（按进程采集）+ 设备热插拔 + 静音诊断；随后 Phase 3 接 ASR。
 
+## 2026-11-20 · Phase 2-C：采集控制面、票据与诊断
+
+分支：`feature/phase-2c-capture-control`（基线 `5a8163d`）。
+
+### 实现
+
+- `capture/state.py`：五状态机（idle/starting/capturing/stopping/error）+ 合法迁移表 + `InvalidTransition`。
+- `capture/controller.py`：Core 侧控制面。spawn sidecar（`RTC_CAPTURE_CONTROL=1` + 一次性票据）、
+  启动/停止超时、幂等 start/stop、sidecar 退出与断连进 error、状态广播给 UI。
+- `tickets.py`：HMAC 票据（session + nonce + expiry），一次性消费，stop/崩溃/关闭即撤销。
+- 协议：`HelloPayload.ticket`、`AudioStatusPayload.mode/errorCode`、新增错误码
+  `invalid_state/capture_timeout/sidecar_unavailable/ticket_invalid`。
+- C# `Control/CaptureControl.cs`：控制模式执行器，动态启停采集、上报 audio.status、默认设备变化检测；
+  `SimulatedFrameSource` 供无音频端点的 CI 验证控制链路。
+- `tools/capture-probe.ps1`：JSON 诊断报告（Windows 版本、设备、参数、统计、错误）。
+- `scripts/capture-smoke.ps1` 重写为 PASS/SKIP/FAIL 三态；判定逻辑抽到 `scripts/capture-verdict.ps1` 并有 9 条自测。
+- `scripts/capture-stability.ps1`：30 分钟采样 CPU/WorkingSet/PrivateBytes/帧率/丢帧/状态，输出 JSON+CSV。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **163 passed, 1 skipped**（新增 40：状态机、票据、控制面、控制消息） |
+| `dotnet test services/audio-capture/tests -c Release` | **78 passed**（新增 4：状态序列化、ticket、配置） |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 6` | **PASS：300 帧，peak -7.7 dBFS，idle，无进程残留** |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 5 -Simulated` | **PASS：252 帧（静音源）** |
+| `pwsh -File scripts/capture-smoke.ps1 -Seconds 5` | **PASS：247 帧，peak -9.7 dBFS** |
+| `pwsh -File scripts/capture-verdict.ps1 -SelfTest` | **PASS：9 条判定用例** |
+| `pwsh -File tools/capture-probe.ps1 -Seconds 3` | 输出 JSON：Windows 11 build 26300、1 渲染端点 + 1 采集端点、157 帧、peak -10.5 dBFS |
+| `pwsh -File scripts/capture-stability.ps1 -Minutes 30 -SampleSeconds 10` | **完成：180 个采样点，90291 帧，50.06 fps，gap/invalid/duplicate/rateLimited 全 0，peak -4.4 dBFS，最终 idle** |
+
+### 30 分钟稳定性数字
+
+| 指标 | 值 |
+|---|---|
+| 时长 / 采样点 | 1800 s / 180 |
+| 帧数 / 平均帧率 | 90291 / 50.06 fps |
+| 丢帧 / 无效 / 重复 / 超速 | 0 / 0 / 0 / 0 |
+| 峰值电平 | -4.4 dBFS |
+| CPU 增长 | 27.47 s（约 1.5% 单核） |
+| WorkingSet 增长 / 峰值 | +10.68 MB / 74.76 MB |
+| PrivateBytes 增长 / 峰值 | +7.00 MB / 35.21 MB |
+| 结束状态 | idle（capture.stop 正常） |
+
+注意：测试期间机器同时跑了构建与其他测试，CPU 数字包含背景负载；WorkingSet 增长主要发生在启动阶段，
+报告保留全部采样点（`.artifacts/stability/*.csv`）以便复现。
+
+### 遇到的问题与修复
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| `capture.start` 立刻 `sidecar_idle` | sidecar 连接后抢先上报 idle，Core 处于 STARTING 时把它当作启动失败 | 控制模式不再在启动时上报 idle，只上报状态变化 |
+| `/healthz` 500 | `requestId` 保存的是 pydantic `RequestId` RootModel，不可 JSON 序列化 | 存为 `str(root)`；healthz 增加异常兜底（记录日志并返回 `internal_error`） |
+| `RTC_CAPTURE_SIDECAR` 路径被吞掉反斜杠 | `shlex.split` POSIX 模式把 `\` 当转义 | 非 POSIX 拆分，或接受 JSON 数组 |
+| Windows 无端点 CI 无法跑控制 E2E | 托管 runner 没有音频设备 | 增加 `RTC_CAPTURE_SIMULATED=1` 的静音帧源，仍走真实进程与控制消息 |
+| 冒烟把"采集失败"当 SKIP | 旧脚本对非零退出只打印 SKIP | 三态判定 + 错误码；设备存在时失败一律 FAIL |
+| 判定逻辑无法在无设备环境验证 | 逻辑内联在脚本里 | 抽成 `capture-verdict.ps1`，9 条自测覆盖 |
+
+### 未完成 / 风险
+
+- 进程级 loopback 未实现（Phase 2-D）；当前只有能力探测位置预留。
+- 设备热插拔只做"检测到变化→报错停止"，没有自动切换（符合"不静默切换"要求）。
+- 30 分钟测试在本机（Windows 11 26300 + Senary 虚拟声卡）完成，未在目标会议室机器复测。
+- 腾讯会议/微信/浏览器三场景实机记录仍缺。
+- 票据不证明进程身份（见 `SECURITY.md §7`）。
+
+### 下一步
+
+Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
+
+### 变更记录
 ### 变更记录
 
 | 日期 | 变更 |
@@ -292,3 +363,4 @@ Phase 2-C：进程级 loopback（按进程采集）+ 设备热插拔 + 静音诊
 | 2026-11-20 | Phase 1：协议、Core、音频骨架、桌面骨架、CI、安全文档 |
 | 2026-11-20 | Phase 2-A：音频二进制协议、Core 接收与统计、C# 发送与模拟流、60 秒端到端 |
 | 2026-11-20 | Phase 2-B：WASAPI 设备级采集、重采样分帧、电平统计、真实采集冒烟 |
+| 2026-11-20 | Phase 2-C：采集控制面、短期票据、三态冒烟、诊断与 30 分钟稳定性 |

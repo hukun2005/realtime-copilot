@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 
 from .models import (
     AudioStatusEvent,
+    AudioStatusPayload,
     CaptureStartEvent,
     CaptureStopEvent,
     ErrorCode,
@@ -198,3 +199,72 @@ def _load(raw: str | bytes | dict[str, Any]) -> Any:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ProtocolViolation("invalid_envelope", f"invalid JSON: {exc.msg}") from exc
+
+
+def make_audio_status(
+    *,
+    state: str,
+    since: int,
+    source: str | None = None,
+    device_id: str | None = None,
+    mode: str | None = None,
+    error: str | None = None,
+    error_code: str | None = None,
+    request_id: str | None = None,
+) -> AudioStatusEvent:
+    """构造 audio.status 事件。
+
+    Args:
+        state: ``idle`` / ``starting`` / ``capturing`` / ``stopping`` / ``error``。
+        since: 进入该状态的时间戳（毫秒，单调或墙钟由生产者决定）。
+        source: ``loopback`` / ``mic`` / None。
+        device_id: 设备端点 ID。
+        mode: ``loopback`` / ``mic`` / ``process`` / None。
+        error: 人类可读说明；不得包含音频内容或令牌。
+        error_code: 稳定机器码。
+        request_id: 关联的请求 ID。
+
+    Returns:
+        未序列化的 ``audio.status`` 事件。
+    """
+    return AudioStatusEvent(
+        v=PROTOCOL_VERSION,
+        type="audio.status",
+        event_id=new_event_id(),
+        request_id=request_id,
+        ts=now_ms(),
+        payload=AudioStatusPayload(
+            state=state,
+            source=source,
+            device_id=device_id,
+            mode=mode,
+            since=since,
+            error=error,
+            error_code=error_code,
+        ),
+    )
+
+def make_event(event_type: str, payload: dict[str, Any], request_id: str | None = None) -> EventV1:
+    """按协议构造任意事件并做一次结构校验。
+
+    Args:
+        event_type: 事件类型，例如 ``capture.start``。
+        payload: 负载字典。
+        request_id: 关联的请求 ID。
+
+    Returns:
+        校验通过的具体事件模型。
+
+    Raises:
+        ProtocolViolation: 事件类型未知或负载非法。
+    """
+    return parse_event(
+        {
+            "v": PROTOCOL_VERSION,
+            "type": event_type,
+            "eventId": new_event_id(),
+            "requestId": request_id,
+            "ts": now_ms(),
+            "payload": payload,
+        }
+    )

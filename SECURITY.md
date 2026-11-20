@@ -84,25 +84,34 @@
 
 **角色是自报的**：`hello.payload.role` 由客户端声明，服务端只做白名单校验，**不能证明对端是哪个操作系统进程**。持有 `runtime.json` 令牌的同用户进程可以声明自己为 `audio` 并发送帧。
 
-### 短期音频凭证（设计，尚未实现）
+### 短期音频票据（Phase 2-C 已实现）
 
-目标：把"知道令牌"与"被授权发送音频"分开，并给音频通道一个短时效、可撤销的凭证。
+目标：把"知道令牌"与"被授权发送音频"分开，并给音频通道一个短时效、可撤销、一次性的凭证。
 
 ```text
 UI(role=ui) --capture.start--> Core
-Core: ticket = HMAC-SHA256(server_secret, sessionId | expiry | nonce | role=audio)
-      系统返回 { ticket, expiresAt }（通过 capture.start 的响应事件携带）
-audio 进程: hello.payload.ticket = <ticket>
-Core: 校验 HMAC、expiry（≤60s）、一次性使用（nonce 已消费集合）
+Core: tickets.begin_session() -> sessionId
+      ticket = base64(JSON{p:audio, n:nonce, s:sessionId, e:expiry}) . HMAC-SHA256(secret, body)
+      spawn sidecar，通过环境变量 RTC_AUDIO_TICKET 传入（不写日志、不进 argv）
+audio: hello.payload.ticket = <ticket>
+Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立即失效
 ```
 
-未在 Phase 2-A 实现的原因（明确记录，避免误以为已具备）：
+实现位置：`copilot_core/tickets.py`（签发/校验）、`capture/controller.py`（会话开始/结束）、
+`ws/connection.py`（role=audio 且票据被要求时校验）。协议字段：`HelloPayload.ticket`（可选）。
 
-1. 需要一个"命令 → 响应"通道来下发 ticket；`capture.start` 目前仍是 `not_implemented`，随 Phase 2-B 的采集控制一起实现。
-2. 凭证不能替换 `runtime.json` 的启动方式：音频进程仍要读 `runtime.json` 拿地址与基础令牌，ticket 只是在其上增加一层短期授权，且必须允许"UI 尚未启动时音频进程仅连接、不发送"的状态。
-3. 需要先在协议里增加可选字段（`HelloPayload.ticket`），并保证旧客户端（不带 ticket）在配置关闭校验时仍可用。
+强制规则：
 
-在实现之前，本节所述风险按 §8 的残余风险对待。
+- 只有 **Core 拉起的 sidecar** 会被要求出示票据：`/healthz` 的 `capture.sidecarPid` 非空期间，
+  `role=audio` 的 hello 必须携带有效票据，否则 `ticket_invalid` + 1008。
+- 票据有效期默认 60 秒（`capture.ticket_ttl_seconds`），一次性消费，重放返回 `replayed`。
+- `capture.stop`、sidecar 崩溃、Core 关闭都会结束会话，旧票据随之失效（session 不同即拒绝）。
+- 手工启动的 sidecar（`runtime.json` + 令牌）不受影响：没有活跃会话时不要求票据，
+  Phase 2-B 的 CLI 用法与测试脚本保持不变。
+
+**残余风险**：票据只证明"这张票是本次 Core 会话签发的"，不证明进程身份。能读取 `runtime.json`
+的同用户进程仍可在会话窗口内抢先连接受理；缓解是窗口短（≤60s）、一次性、且 Core 会记录
+`audio` 连接与票据消费。真正的进程身份（父进程/PID 校验、命名管道句柄继承）不在本阶段范围。
 
 ### 真实采集的隐私边界（Phase 2-B）
 

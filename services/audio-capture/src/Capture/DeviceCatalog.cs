@@ -15,6 +15,27 @@ public static class DeviceCatalog
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static readonly Lazy<MMDeviceEnumerator> Enumerator = new(() => new MMDeviceEnumerator());
 
+    /// <summary>当前默认端点的 ID。</summary>
+    /// <param name="flow">数据流向。</param>
+    /// <returns>端点 ID；不可用时为 <c>null</c>。</returns>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static string? DefaultId(NAudio.CoreAudioApi.DataFlow flow)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            return Enumerator.Value.GetDefaultAudioEndpoint(flow, NAudio.CoreAudioApi.Role.Multimedia).ID;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>按设备 ID 解析 WASAPI 端点。</summary>
     /// <param name="deviceId">设备 ID；为空时返回 <c>null</c>（表示系统默认设备）。</param>
     /// <param name="flow">数据流向。</param>
