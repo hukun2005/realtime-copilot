@@ -198,6 +198,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 **验收（实测，见 `BUILD_LOG.md`）**
 
 - [x] 状态机合法/非法迁移、并发与重复命令、启动/停止超时、崩溃与断连均有测试。
+- [x] P2-C.1 加固：asyncio.Lock 串行化生命周期、会话代次校验、统一失败收尾（撤销票据/终止进程/取消任务）、迟到状态忽略。
 - [x] 真实 Core + 真实 sidecar：`capture.start → capturing → 300 帧 → capture.stop → idle`，无进程残留。
 - [x] 票据：会话绑定、过期、重放、篡改、跨会话均拒绝。
 - [x] 非 audio 角色发音频帧仍被拒绝；audio 角色不能下发 capture 命令。

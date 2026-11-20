@@ -354,7 +354,55 @@ Phase 2-C：进程级 loopback（按进程采集）+ 设备热插拔 + 静音诊
 
 Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 
-### 变更记录
+## 2026-11-20 · P2-C.1：控制面并发与清理加固
+
+分支：`feature/phase-2c1-controller-hardening`（基线 `6f4c560`）。
+
+### 修复内容
+
+- `CaptureController` 引入 `asyncio.Lock`：start/stop 的状态检查、迁移与会话登记全部串行化，
+  **不在持锁期间等待进程退出或 sidecar 状态回报**。
+- 会话代次（generation）：每次 start 递增；`handle_status` 校验连接实例、代次与 requestId，
+  迟到/跨连接/跨会话消息直接忽略。
+- 迟到状态语义：STARTING + idle → ERROR(`sidecar_idle`) 并清理；STOPPING + capturing 忽略；
+  STOPPING + idle → IDLE；ERROR 不被迟到消息清除。
+- 统一失败收尾 `_fail_and_cleanup`：取消超时任务、撤销票据、终止进程（幂等，只终止一次）、
+  清空连接、广播最终状态；正常停止走 `_conclude_stop`，不会被误报为 ERROR。
+- `attach` 改为 async，连接登记与 start 指令下发分离；`stop` 等待 `session.stopped` 事件而非轮询。
+- `/healthz` 增加 `generation`、`sidecarExitCode`、`sidecarTermination`（`core`/`self`）。
+- 脚本：稳定性报告记录 Windows build、状态迁移、sidecar 退出码、模拟/真实标记，失败时退出码非零；
+  诊断报告补充 start/stop 状态与退出码。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -q` | **181 passed, 1 skipped**（新增 18 个加固测试） |
+| `dotnet test services/audio-capture/tests -c Release` | 78 passed（本轮未改 C#） |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 5` | PASS：250 帧，peak -10.5 dBFS，idle，无残留 |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 4 -Simulated` | PASS：201 帧（静音源） |
+| `pwsh -File scripts/capture-stability.ps1 -Minutes 1 -SampleSeconds 2 -Simulated` | PASS：30 采样点、3162 帧、51.7 fps、0 丢帧，报告含 build 26300 与状态迁移 |
+| `pwsh -File tools/capture-probe.ps1 -Seconds 3` | start=capturing、stop=idle、exit=1(termination=core)、161 帧 |
+
+说明：正常停止后 Core 会主动终止 sidecar 进程，因此 `sidecarExitCode` 为 1，
+`sidecarTermination=core` 表示"由 Core 终止"而非崩溃；报告同时记录该字段以避免误读。
+
+### 新增测试（18）
+
+- 并发：20 并发 start 只 spawn 一个；20 并发 stop 只下发一次且只终止一次；start/stop 交错；
+  两个客户端同时 start；sidecar 连接期间重复 start。
+- 迟到事件：STARTING+idle、STOPPING+capturing、STOPPING+idle、ERROR+capturing、ERROR+idle、
+  旧连接状态、wrong requestId。
+- 清理：启动超时、停止超时、sidecar error、shutdown、disconnect、崩溃与 stop 竞态。
+- 断言真实副作用：spawn 次数、`terminate_calls`、票据 `consume` 失败、后台任务结束、`sidecarPid` 为空。
+
+### 未完成 / 风险
+
+- 本轮未改动 C# sidecar 与音频协议。
+- 进程级 loopback、按来源统计、静音事件仍未实现（Phase 2-D / 后续）。
+- 票据仍不证明进程身份。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -364,3 +412,4 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 | 2026-11-20 | Phase 2-A：音频二进制协议、Core 接收与统计、C# 发送与模拟流、60 秒端到端 |
 | 2026-11-20 | Phase 2-B：WASAPI 设备级采集、重采样分帧、电平统计、真实采集冒烟 |
 | 2026-11-20 | Phase 2-C：采集控制面、短期票据、三态冒烟、诊断与 30 分钟稳定性 |
+| 2026-11-20 | P2-C.1：控制面并发锁、会话代次、统一清理与迟到状态处理 |

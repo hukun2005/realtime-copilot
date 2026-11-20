@@ -132,7 +132,7 @@ class EventConnection:
             if self._on_authenticated is not None:
                 self._on_authenticated(self.role)
             if self.role == "audio" and self._capture is not None:
-                self._capture.attach(self)
+                await self._capture.attach(self)
 
             await self._send(
                 make_system_ready(
@@ -356,7 +356,7 @@ class EventConnection:
             return
         if isinstance(event, AudioStatusEvent):
             if self.role == "audio" and self._capture is not None:
-                await self._capture.handle_status(event)
+                await self._capture.handle_status(event, self)
                 return
             await self._send(
                 make_system_error(
