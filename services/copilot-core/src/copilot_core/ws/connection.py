@@ -32,6 +32,7 @@ from copilot_protocol import (
     PongEvent,
     ProtocolViolation,
     dumps,
+    make_event,
     make_ping,
     make_pong,
     make_system_error,
@@ -40,8 +41,10 @@ from copilot_protocol import (
 )
 
 from ..audio import AudioHub, AudioSession
+from ..capture import CaptureController
 from ..config import AppConfig
 from ..security import tokens_equal
+from ..tickets import TicketIssuer
 
 #: 允许建立连接的来源地址。Core 只绑定回环，这里是纵深防御。
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1"})
@@ -70,6 +73,8 @@ class EventConnection:
         logger: Any,
         on_authenticated: Callable[[str], None] | None = None,
         audio_hub: AudioHub | None = None,
+        capture: CaptureController | None = None,
+        tickets: TicketIssuer | None = None,
     ) -> None:
         """初始化连接对象。
 
@@ -90,6 +95,8 @@ class EventConnection:
         self._closed = False
         self._last_pong = time.monotonic()
         self._audio_hub = audio_hub
+        self._capture = capture
+        self._tickets = tickets
         self._audio: AudioSession | None = None
         self._frames_accepted = 0
         self.role: str | None = None
@@ -111,10 +118,21 @@ class EventConnection:
             self.role = str(hello.payload.role.root)
             self.client_version = hello.payload.client_version
             self._log.info("client authenticated", extra={"role": self.role, "client": hello.payload.client_name})
+            if self.role == "audio" and self._tickets is not None and self._tickets.required:
+                check = self._tickets.consume(hello.payload.ticket)
+                if not check.ok:
+                    await self._fail(
+                        "ticket_invalid",
+                        f"audio ticket rejected: {check.reason.value if check.reason else 'invalid'}",
+                        CLOSE_POLICY,
+                    )
+                    return
             if self.role == "audio" and self._audio_hub is not None:
                 self._audio = self._audio_hub.open_session()
             if self._on_authenticated is not None:
                 self._on_authenticated(self.role)
+            if self.role == "audio" and self._capture is not None:
+                self._capture.attach(self)
 
             await self._send(
                 make_system_ready(
@@ -136,9 +154,34 @@ class EventConnection:
             self._log.exception("connection failed unexpectedly")
         finally:
             await self._close(CLOSE_NORMAL)
+            if self.role == "audio" and self._capture is not None:
+                await self._capture.handle_disconnect(self)
             self._release_audio()
             if self.role is not None:
                 self._log.info("connection closed", extra={"role": self.role})
+
+    async def send_event(self, event: Any) -> None:
+        """向本连接发送一条已构造的事件。
+
+        Args:
+            event: 协议事件模型。
+        """
+        await self._send(event)
+
+    async def send_control(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        request_id: str | None = None,
+    ) -> None:
+        """向本连接发送控制命令（capture.start / capture.stop）。
+
+        Args:
+            event_type: 事件类型。
+            payload: 命令负载。
+            request_id: 关联的请求 ID。
+        """
+        await self._send(make_event(event_type, payload, request_id))
 
     def _release_audio(self) -> None:
         """连接结束时归还音频会话并记录本次流量的汇总。"""
@@ -296,16 +339,25 @@ class EventConnection:
                     )
                 )
                 return
-            await self._send(
-                make_system_error(
-                    code="not_implemented",
-                    message=f"{event.type} is implemented in Phase 2-B",
-                    retryable=False,
-                    request_id=request_id,
+            if self._capture is None:
+                await self._send(
+                    make_system_error(
+                        code="sidecar_unavailable",
+                        message="capture control is not configured",
+                        retryable=False,
+                        request_id=request_id,
+                    )
                 )
-            )
+                return
+            if isinstance(event, CaptureStartEvent):
+                await self._capture.start(event)
+            else:
+                await self._capture.stop(event)
             return
         if isinstance(event, AudioStatusEvent):
+            if self.role == "audio" and self._capture is not None:
+                await self._capture.handle_status(event)
+                return
             await self._send(
                 make_system_error(
                     code="unsupported_event",

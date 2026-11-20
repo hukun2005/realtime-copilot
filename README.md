@@ -4,16 +4,16 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 
 ## 当前状态
 
-**Phase 1（基础工程）、Phase 2-A（音频二进制协议与 Core 接收通道）、Phase 2-B（WASAPI 采集）已完成并验证。** 当前是可运行、可编译、可测试的跨语言骨架：
+**Phase 1、Phase 2-A（音频协议）、Phase 2-B（WASAPI 采集）、Phase 2-C（采集控制面与安全）已完成并验证。** 当前是可运行、可编译、可测试的跨语言骨架：
 
 - 统一协议（JSON Schema → TypeScript / Pydantic / 手写 C# DTO）
 - **音频二进制帧协议 v1**：28 字节头 + 640 字节 PCM16LE，跨语言 fixtures 与错误码一致
-- Python Core：WebSocket 鉴权、心跳、错误模型、TOML 配置、SQLite 迁移、JSON 日志、**音频帧解析/序号连续性/速率限制/统计/电平**
-- C# 音频进程：连接 Core、握手、心跳、断线识别、**二进制帧发送**、**WASAPI loopback/麦克风采集（48k 立体声 → 16k 单声道 → 20ms 分帧）**、模拟音频流
+- Python Core：WebSocket 鉴权、心跳、错误模型、TOML 配置、SQLite 迁移、JSON 日志、**音频帧解析/序号连续性/速率限制/统计/电平**、**采集控制状态机（capture.start/stop、超时、崩溃处理、短期票据）**
+- C# 音频进程：连接 Core、握手、心跳、断线识别、**二进制帧发送**、**WASAPI loopback/麦克风采集（48k 立体声 → 16k 单声道 → 20ms 分帧）**、**控制模式（等待 capture.start、上报 audio.status、设备变化检测）**、模拟音频流
 - Electron + Vue3 桌面骨架：状态展示、IPC 白名单、Core 连接
 - GitHub Actions 四作业 CI（含 Windows 真实 60 秒音频端到端）
 
-**尚未实现**：VAD、ASR、问题检测、DeepSeek 问答、悬浮窗、进程级 loopback（按进程采集）。
+**尚未实现**：VAD、ASR、问题检测、DeepSeek 问答、悬浮窗、进程级 loopback（按进程采集，Phase 2-D）。
 
 性能目标（P50 < 1s / P95 < 2s）在后续阶段测量，**当前没有任何延迟数据**，详见 [TEST_PLAN.md](TEST_PLAN.md)。
 
@@ -38,7 +38,11 @@ services/audio-capture/  # C# + NAudio：连接 Core、二进制音频发送、�
 apps/desktop/            # Electron 主进程 + Vue3 渲染进程（状态展示）
 scripts/e2e-smoke.ps1    # 真实 Core + 真实 C# 客户端的握手冒烟
 scripts/e2e-audio.ps1    # 真实 Core + 真实 C# 客户端 60 秒音频帧传输与丢帧检测
-scripts/capture-smoke.ps1 # 真实声卡 loopback 采集 + 电平校验（需音频设备）
+scripts/capture-smoke.ps1 # 真实声卡 loopback 采集 + 电平校验（PASS/SKIP/FAIL，需音频设备）
+scripts/e2e-control.ps1 # 真实 Core + 真实 sidecar 的控制面端到端
+scripts/control_client.py # ui 角色驱动 capture.start/stop 的测试客户端
+scripts/capture-stability.ps1 # 30 分钟稳定性采样与报告
+tools/capture-probe.ps1 # 机器可读诊断报告（系统/设备/参数/统计）
 tools/tone-player/       # 诊断工具：通过 WASAPI 播放测试音，仅供 capture-smoke 使用
 tests/fixtures/          # 测试数据（Phase 2-B 起加入音频样本）
 ```
@@ -89,15 +93,17 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频） | `uv run pytest -q` | 123 passed, 1 skipped |
+| Python（协议 + Core + 音频 + 控制面） | `uv run pytest -q` | 163 passed, 1 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
-| C# | `dotnet test services/audio-capture/tests -c Release` | 74 passed |
+| C# | `dotnet test services/audio-capture/tests -c Release` | 78 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 22 passed |
 | 桌面（Vue/主进程逻辑） | `pnpm -C apps/desktop test` | 11 passed |
 | 类型检查 | `pnpm -r --if-present run typecheck` | 通过（含 vue-tsc） |
 | 握手端到端 | `pwsh -File scripts/e2e-smoke.ps1` | PASS |
 | 音频端到端（60s） | `pwsh -File scripts/e2e-audio.ps1 -Seconds 60` | PASS：2995 帧、注入 6 次丢帧全部识别 |
-| 真实采集冒烟 | `pwsh -File scripts/capture-smoke.ps1` | PASS：8 秒 398 帧，整段峰值 -8.7 dBFS |
+| 真实采集冒烟 | `pwsh -File scripts/capture-smoke.ps1` | PASS（三态判定）：峰值 -4.4 dBFS |
+| 控制面端到端 | `pwsh -File scripts/e2e-control.ps1` | PASS：300 帧、idle、无进程残留 |
+| 30 分钟稳定性 | `pwsh -File scripts/capture-stability.ps1 -Minutes 30` | 报告见 `.artifacts/stability` |
 
 详细结果与命令输出见 [BUILD_LOG.md](BUILD_LOG.md)。
 
@@ -122,6 +128,8 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | P1 基础工程（协议 / Core / 音频骨架 / 桌面骨架 / CI） | 完成 |
 | P2-A 音频二进制协议与 Core 接收通道 | 完成 |
 | P2-B Windows 音频采集（WASAPI） | 完成（设备级 loopback + 可选麦克风） |
+| P2-C 采集控制面、票据、诊断 | 完成 |
+| P2-D 进程级 loopback | 未开始 |
 | P3 流式 ASR | 未开始 |
 | P4 问题检测 | 未开始 |
 | P5 DeepSeek 问答 | 未开始 |

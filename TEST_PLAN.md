@@ -145,6 +145,21 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 **已知环境差异**：用 `WithDevice(默认端点)` 打开 loopback 时，本机曾出现其他进程播放被采成静音；改为让 builder 解析默认端点，或在修复枚举器生命周期后显式指定端点，均正常。跨机器行为需在目标机上用同一脚本复测。
 
+### 采集控制面（Phase 2-C）
+
+| 层 | 内容 | 位置 |
+|---|---|---|
+| 状态机 | 合法迁移、非法迁移、错误态复位、迁移表完整性 | 	ests/test_capture_state.py |
+| 票据 | 一次性、重放、过期、跨会话、篡改、无会话签发 | 	ests/test_tickets.py |
+| 控制面 | 幂等 start、启动/停止超时、sidecar 退出、断连、idle 停止、错误后重启、票据不落日志 | 	ests/test_capture_controller.py |
+| 协议 | audio.status 字段、hello ticket 序列化、配置读取 | 	ests/ControlProtocolTests.cs、	ests/AppConfigTests.cs |
+| 端到端 | 真实 Core + 真实 sidecar：start→capturing→帧→stop→idle，无残留进程 | scripts/e2e-control.ps1、scripts/control_client.py |
+| 三态判定 | PASS/SKIP/FAIL 与错误码（no_audio_device / playback_failed / capture_failed / no_frames / invalid_frames / silent_capture） | scripts/capture-smoke.ps1 |
+| 稳定性 | 30 分钟采样 CPU/WorkingSet/PrivateBytes/帧率/丢帧/状态，输出 JSON+CSV | scripts/capture-stability.ps1 |
+
+**CI 限制**：托管 Windows runner 没有音频端点，控制面 E2E 在 CI 用 -Simulated（sidecar 用静音帧源）
+验证真实的跨进程控制与二进制帧链路；真实 WASAPI 采集的 E2E 只能在本机运行，结果记录在 BUILD_LOG.md。
+
 ## 6. 安全测试
 
 | 编号 | 断言 | 方式 |

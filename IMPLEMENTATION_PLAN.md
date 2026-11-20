@@ -174,20 +174,46 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 - [ ] 麦克风实机验证（代码路径已接，未用真实麦克风测试）。
 
 **风险**：R5（进程级 loopback 的 Win10 build 门槛）、R6（受保护音频）。设备级采集不依赖进程级 API，已在 Win11 本机验证可用。
-## Phase 2-C — 进程级 loopback（按进程采集）
+## Phase 2-C — 采集控制面、安全与诊断（已完成）
+
+**状态**：控制面、票据、统计、诊断与稳定性脚本已完成；进程级 loopback 未实现（转到 Phase 2-D）。
+
+**目标**：把 CLI 启动的采集升级为可被 UI 控制、被 Core 管理、状态可观测、错误可恢复的服务。
+
+**交付**
+
+| 路径 | 内容 |
+|---|---|
+| `services/copilot-core/src/copilot_core/capture/state.py` | 五状态机 + 合法迁移表 + `InvalidTransition` |
+| `services/copilot-core/src/copilot_core/capture/controller.py` | sidecar 生命周期、启动/停止超时、幂等、断连与崩溃处理、状态广播 |
+| `services/copilot-core/src/copilot_core/tickets.py` | HMAC 票据：会话绑定、一次性 nonce、过期、撤销 |
+| `services/copilot-core/src/copilot_core/ws/connection.py` | 票据校验、capture.start/stop 路由、audio.status 接收、`send_control` |
+| `services/audio-capture/src/Control/CaptureControl.cs` | 控制模式执行器：动态启停采集、状态上报、设备变化检测 |
+| `services/audio-capture/src/Audio/SimulatedFrameSource.cs` | 无端点环境（CI）用的静音帧源，仅控制模式且显式开启时使用 |
+| `scripts/control_client.py` | ui 角色驱动 start/stop/session 的测试客户端 |
+| `scripts/e2e-control.ps1` | 真实 Core + 真实 sidecar + 真实控制消息的端到端 |
+| `scripts/capture-stability.ps1` | 30 分钟稳定性采样与报告 |
+| `tools/capture-probe.ps1` | 机器可读诊断报告（系统版本、设备、参数、统计） |
+
+**验收（实测，见 `BUILD_LOG.md`）**
+
+- [x] 状态机合法/非法迁移、并发与重复命令、启动/停止超时、崩溃与断连均有测试。
+- [x] 真实 Core + 真实 sidecar：`capture.start → capturing → 300 帧 → capture.stop → idle`，无进程残留。
+- [x] 票据：会话绑定、过期、重放、篡改、跨会话均拒绝。
+- [x] 非 audio 角色发音频帧仍被拒绝；audio 角色不能下发 capture 命令。
+- [x] 30 分钟稳定性脚本产出 JSON/CSV 报告。
+- [x] `capture-smoke.ps1` 三态判定（PASS/SKIP/FAIL）并区分错误码。
+
+**未完成**
+
+- [ ] 进程级 loopback（`WithProcessLoopback`）——Phase 2-D；本阶段只做能力探测接口预留。
+- [ ] 设备热插拔自动切换（当前是"检测到变化→报错并停止"，符合"不静默切换"的要求）。
+- [ ] 腾讯会议/微信/浏览器三场景实机记录。
+- [ ] 30 分钟测试的结论需要按目标机器复测（本机为 Windows 11 26300 + Senary 虚拟声卡）。
+
+## Phase 2-D — 进程级 loopback（按进程采集）
 
 **状态**：未开始。
-
-**目标**：只采集指定进程（如腾讯会议）的输出音频，避免把整机声音（通知、音乐）送进转写。
-
-**要点**
-
-- `WasapiRecorderBuilder.WithProcessLoopback(processId, ProcessLoopbackMode)`（NAudio 3.3 已提供封装），失败时明确报 `process_loopback_unsupported` 并回退设备级，不静默降级。
-- Windows 版本门槛：进程 loopback 需要 Windows 10 build 20348+；在 19044/19045 上必须给出明确提示。
-- 进程选择 UI 与设备热插拔（`IMMNotificationClient`）一并实现。
-- 验收：腾讯会议/微信/浏览器三场景实机记录；进程退出、设备切换后 2 秒内恢复；CPU 与内存预算同 2-B。
-
-**依赖**：Phase 2-B（设备级采集已稳定）。
 
 ## Phase 3 — 流式 ASR
 

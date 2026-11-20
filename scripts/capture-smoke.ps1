@@ -1,23 +1,25 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-  真实 WASAPI loopback 采集冒烟：播放一段音调，用采集进程抓取，再核对 Core 的统计与电平。
+  真实 WASAPI loopback 采集冒烟：播放测试音，用 CLI 采集进程抓取，再核对 Core 统计与电平。
 
 .DESCRIPTION
-  与 e2e-audio.ps1 的区别：后者发送的是模拟帧；本脚本验证的是真实声卡路径
-  （设备打开、重采样、分帧、发送）。需要本机有可用的输出设备与音频会话。
+  结果是三态之一，并以退出码表达：
 
-  判定：
-    · 采集帧数 > 100（8 秒、50fps 下约 400）
-    · Core 记录的整段峰值电平 > -45 dBFS（证明不是静音；末帧可能已回到静音）
-  无输出设备或播放失败时输出 SKIP 并以 0 退出，避免在不具备条件的机器上误报失败。
+    PASS（0）  采集到足够帧且整段峰值 > -45 dBFS
+    SKIP（0）  环境明确不具备测试条件（没有可用的 loopback 端点）
+    FAIL（1）  采集进程异常、没有帧、有无效帧、或采到静音
+
+  设备存在但采集失败一定是 FAIL，不会被当成 SKIP。错误码：
+    no_audio_device / playback_failed / capture_failed / no_frames / invalid_frames / silent_capture
 
 .EXAMPLE
   pwsh -File scripts/capture-smoke.ps1 -Seconds 8
 #>
 param(
     [int]$Seconds = 8,
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$SkipPlayback
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,29 +47,40 @@ function Wait-ForRuntime([string]$path, [int]$timeoutSeconds = 30) {
     throw "core did not write $path within $timeoutSeconds seconds"
 }
 
+function Finish([string]$Result, [string]$Code, [string]$Detail, [int]$ExitCode) {
+    $payload = [ordered]@{ result = $Result; code = $Code; detail = $Detail } | ConvertTo-Json -Compress
+    Write-Host "[capture-smoke] $Result ($Code): $Detail"
+    Write-Host "[capture-smoke] $payload"
+    exit $ExitCode
+}
+
 try {
     New-Item -ItemType Directory -Path $dataDir | Out-Null
+    $python = Get-VenvPython
     $runtimePath = Join-Path $dataDir "runtime.json"
     $wavPath = Join-Path $dataDir "tone.wav"
 
-    $python = Get-VenvPython
+    & dotnet build (Join-Path $root "services/audio-capture/AudioCapture.csproj") -c $Configuration --nologo | Out-Null
+    & dotnet build (Join-Path $root "tools/tone-player/TonePlayer.csproj") -c $Configuration --nologo | Out-Null
+    $captureDll = Join-Path $root "services/audio-capture/bin/$Configuration/net10.0/audio-capture.dll"
+    $tonePlayer = Join-Path $root "tools/tone-player/bin/$Configuration/net10.0/tone-player.dll"
+
+    $devices = & dotnet $captureDll --list-devices | ConvertFrom-Json
+    $loopback = $devices | Where-Object { $_.flow -eq "loopback" } | Select-Object -First 1
+    if (-not $loopback) {
+        Finish "SKIP" "no_audio_device" "no loopback endpoint is available on this host" 0
+    }
+
     $toneScript = @"
 import math, struct, sys, wave
-path = sys.argv[1]
-seconds = 6
-with wave.open(path, 'wb') as handle:
-    handle.setnchannels(1)
-    handle.setsampwidth(2)
-    handle.setframerate(16000)
+with wave.open(sys.argv[1], 'wb') as handle:
+    handle.setnchannels(1); handle.setsampwidth(2); handle.setframerate(16000)
     handle.writeframes(b''.join(
         struct.pack('<h', int(12000 * math.sin(2 * math.pi * 440 * index / 16000)))
-        for index in range(16000 * seconds)
+        for index in range(16000 * 6)
     ))
 "@
     & $python -c $toneScript $wavPath
-    Write-Host "[capture-smoke] tone ready: $wavPath"
-
-    & dotnet build (Join-Path $root "services/audio-capture/AudioCapture.csproj") -c $Configuration --nologo | Out-Null
 
     $env:RTC_DATA_DIR = $dataDir
     $env:RTC_SERVER_PORT = "0"
@@ -77,50 +90,56 @@ with wave.open(path, 'wb') as handle:
         -RedirectStandardError (Join-Path $dataDir "core.err")
     $runtime = Wait-ForRuntime $runtimePath
 
-    $assembly = Join-Path $root "services/audio-capture/bin/$Configuration/net10.0/audio-capture.dll"
     $clientLog = Join-Path $dataDir "client.out"
     $clientErr = Join-Path $dataDir "client.err"
     $client = Start-Process -FilePath "dotnet" `
-        -ArgumentList $assembly, "--runtime=$runtimePath", "--capture-loopback", "--seconds=$Seconds" `
+        -ArgumentList $captureDll, "--runtime=$runtimePath", "--capture-loopback", "--seconds=$Seconds" `
         -PassThru -WindowStyle Hidden -RedirectStandardOutput $clientLog -RedirectStandardError $clientErr
 
-    Start-Sleep -Seconds 1
-    $player = Start-Process -FilePath "powershell.exe" `
-        -ArgumentList "-NoProfile", "-Command", "(New-Object Media.SoundPlayer '$wavPath').PlaySync()" `
-        -PassThru -WindowStyle Hidden
+    Start-Sleep -Milliseconds 500
+    if (-not $SkipPlayback) {
+        $player = Start-Process -FilePath "dotnet" -ArgumentList $tonePlayer, "5" -PassThru -WindowStyle Hidden
+    }
 
     if (-not $client.WaitForExit(($Seconds + 40) * 1000)) {
-        throw "capture client did not finish in time"
+        Finish "FAIL" "capture_failed" "capture client did not finish in time" 1
+    }
+
+    if ($player) {
+        $player.WaitForExit(15000) | Out-Null
+        if ($player.ExitCode -ne 0) {
+            Finish "FAIL" "playback_failed" "tone player exited with code $($player.ExitCode)" 1
+        }
     }
 
     if ($client.ExitCode -ne 0) {
-        $stderr = if (Test-Path $clientErr) { Get-Content $clientErr -Raw } else { "" }
-        Write-Host "[capture-smoke] SKIP: capture exited $($client.ExitCode) — no usable capture device?`n$stderr"
-        exit 0
+        $stderr = if (Test-Path $clientErr) { (Get-Content $clientErr -Raw).Trim() } else { "" }
+        Finish "FAIL" "capture_failed" "capture exited $($client.ExitCode): $stderr" 1
     }
 
     $summaryLine = Get-Content $clientLog | Where-Object { $_ -match '"capture":' } | Select-Object -Last 1
-    if (-not $summaryLine) { throw "client printed no capture summary" }
-    $summary = ($summaryLine | ConvertFrom-Json).capture
-
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$($runtime.port)/healthz" -TimeoutSec 5
-    $audio = $health.audio
-    Write-Host ("[capture-smoke] sent={0} dropped={1} core frames={2} bytes={3} sessionPeak={4}dBFS lastPeak={5}dBFS gaps={6} invalid={7}" -f `
-        $summary.sent, $summary.dropped, $audio.frames, $audio.bytes, $audio.peakDbfs, $audio.lastPeakDbfs, $audio.gaps, $audio.invalid)
-
-    if ($audio.frames -le 100) { throw "too few frames captured: $($audio.frames)" }
-    if ($audio.invalid -ne 0) { throw "core reported $($audio.invalid) invalid frames" }
-    if ($null -eq $audio.peakDbfs -or $audio.peakDbfs -le -45) {
-        Write-Host "[capture-smoke] SKIP: captured audio is silent (no audible output path on this host)"
-        exit 0
+    if (-not $summaryLine) {
+        Finish "FAIL" "capture_failed" "capture printed no summary" 1
     }
 
-    Write-Host "[capture-smoke] PASS"
+    $summary = ($summaryLine | ConvertFrom-Json).capture
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$($runtime.port)/healthz" -TimeoutSec 5
+    $audio = $health.audio
+
+    $detail = "sent=$($summary.sent) frames=$($audio.frames) peak=$($audio.peakDbfs)dBFS rms=$($audio.lastRmsDbfs)dBFS gaps=$($audio.gaps) invalid=$($audio.invalid)"
+
+    . (Join-Path $PSScriptRoot "capture-verdict.ps1")
+    $verdict = Get-CaptureVerdict -DevicePresent $true -PlaybackFailed $false -CaptureExited $false `
+        -Frames $audio.frames -Invalid $audio.invalid -PeakDbfs $audio.peakDbfs
+    Finish $verdict.Result $verdict.Code $detail $verdict.ExitCode
+}
+catch {
+    Finish "FAIL" "unexpected" $_.Exception.Message 1
 }
 finally {
-    if ($player -and -not $player.HasExited) { Stop-Process -Id $player.Id -Force -ErrorAction SilentlyContinue }
-    if ($client -and -not $client.HasExited) { Stop-Process -Id $client.Id -Force -ErrorAction SilentlyContinue }
-    if ($core -and -not $core.HasExited) { Stop-Process -Id $core.Id -Force -ErrorAction SilentlyContinue }
+    foreach ($process in @($player, $client, $core)) {
+        if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+    }
     Start-Sleep -Milliseconds 300
     Remove-Item -Recurse -Force $dataDir -ErrorAction SilentlyContinue
 }

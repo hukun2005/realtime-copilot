@@ -93,7 +93,7 @@ async def test_unknown_event_keeps_connection_open(live_server) -> None:  # type
         assert pong["payload"]["nonce"] == "still-alive"
 
 
-async def test_capture_start_is_not_implemented(live_server) -> None:  # type: ignore[no-untyped-def]
+async def test_capture_start_without_sidecar_reports_unavailable(live_server) -> None:  # type: ignore[no-untyped-def]
     async with websockets.connect(live_server.url) as socket:
         await socket.send(hello_event(live_server.token))
         await recv_until(socket, "system.ready")
@@ -106,8 +106,12 @@ async def test_capture_start_is_not_implemented(live_server) -> None:  # type: i
             )
         )
         error = await recv_until(socket, "system.error")
-        assert error["payload"]["code"] == "not_implemented"
+        assert error["payload"]["code"] == "sidecar_unavailable"
         assert error["requestId"] == "req_capture0000000000000000"
+
+        async with httpx.AsyncClient() as client:
+            health = (await client.get(f"{live_server.http_url}/healthz")).json()["capture"]
+        assert health["state"] == "idle"
 
 
 async def test_binary_frames_from_ui_role_are_rejected(live_server) -> None:  # type: ignore[no-untyped-def]

@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shlex
 import sys
 import tomllib
 from collections.abc import Mapping
@@ -34,6 +36,10 @@ ENV_OVERRIDES: dict[str, tuple[tuple[str, ...], str]] = {
     "RTC_CAPTURE_FRAME_MS": (("capture", "frame_ms"), "int"),
     "RTC_CAPTURE_MIC_ENABLED": (("capture", "mic_enabled"), "bool"),
     "RTC_CAPTURE_LOOPBACK_ENABLED": (("capture", "loopback_enabled"), "bool"),
+    "RTC_CAPTURE_SIDECAR": (("capture", "sidecar_command"), "command"),
+    "RTC_CAPTURE_START_TIMEOUT_MS": (("capture", "start_timeout_ms"), "int"),
+    "RTC_CAPTURE_STOP_TIMEOUT_MS": (("capture", "stop_timeout_ms"), "int"),
+    "RTC_CAPTURE_TICKET_TTL_SECONDS": (("capture", "ticket_ttl_seconds"), "int"),
 }
 
 
@@ -52,7 +58,7 @@ class ServerConfig(BaseModel):
 
 
 class CaptureConfig(BaseModel):
-    """采集参数；Phase 1 只做校验与下发，不实现采集。"""
+    """采集控制参数：sidecar 启动命令、超时与票据有效期。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -60,6 +66,14 @@ class CaptureConfig(BaseModel):
     sample_rate: Literal[16000] = 16000
     loopback_enabled: bool = True
     mic_enabled: bool = False
+    #: sidecar 启动命令（argv 列表）；为空表示禁用控制面（``capture.start`` 返回 sidecar_unavailable）。
+    sidecar_command: list[str] = Field(default_factory=list)
+    #: 发出 capture.start 后等待 sidecar 报告 capturing 的上限。
+    start_timeout_ms: int = Field(default=8000, ge=1000, le=60_000)
+    #: 发出 capture.stop 后等待 sidecar 报告 idle 的上限；超时强制结束进程。
+    stop_timeout_ms: int = Field(default=5000, ge=1000, le=60_000)
+    #: 音频票据有效期。
+    ticket_ttl_seconds: int = Field(default=60, ge=5, le=600)
 
 
 class LoggingConfig(BaseModel):
@@ -201,6 +215,10 @@ def _apply_env(raw: dict[str, Any], env: Mapping[str, str]) -> None:
                 value = int(value)
             elif kind == "bool":
                 value = _parse_bool(value)
+            elif kind == "command":
+                text = value.strip()
+                # Windows 路径含反斜杠：JSON 数组原样解析，否则用非 POSIX 拆分（避免吞掉 \）。
+                value = json.loads(text) if text.startswith("[") else shlex.split(text, posix=False)
         except ValueError as exc:
             raise ConfigError(f"{name} must be {kind}: {value!r}", path=".".join(path)) from exc
         target = raw

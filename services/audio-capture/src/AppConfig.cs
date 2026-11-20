@@ -51,6 +51,12 @@ public sealed record AppConfig
     /// <summary>实际使用的 runtime.json 路径（可能不存在）。</summary>
     public string? RuntimePath { get; init; }
 
+    /// <summary>Core 下发的短期音频票据（由 <c>RTC_AUDIO_TICKET</c> 注入，不写日志）。</summary>
+    public string? Ticket { get; init; }
+
+    /// <summary>控制模式：由 Core 拉起，等待 capture.start/stop 而不是自行采集。</summary>
+    public bool Control { get; init; }
+
     /// <summary>加载配置。</summary>
     /// <param name="args">命令行参数，支持 <c>--key=value</c>。</param>
     /// <param name="environment">环境变量表。</param>
@@ -124,6 +130,8 @@ public sealed record AppConfig
                 settings.GetValueOrDefault("logLevel")) ?? "info",
             ConnectTimeout = ReadTimeout(environment, "RTC_CONNECT_TIMEOUT_MS", TimeSpan.FromSeconds(5)),
             IdleTimeout = ReadTimeout(environment, "RTC_IDLE_TIMEOUT_MS", TimeSpan.FromSeconds(45)),
+            Ticket = ReadString(environment, "RTC_AUDIO_TICKET"),
+            Control = ReadFlag(environment, "RTC_CAPTURE_CONTROL"),
             RuntimePath = runtimePath,
         };
     }
@@ -261,6 +269,23 @@ public sealed record AppConfig
             string text => text,
             _ => Convert.ToString(value, CultureInfo.InvariantCulture),
         };
+    }
+
+    private static string? ReadString(IDictionary environment, string key)
+    {
+        var raw = Get(environment, key);
+        return string.IsNullOrWhiteSpace(raw) ? null : raw;
+    }
+
+    private static bool ReadFlag(IDictionary environment, string key)
+    {
+        var raw = Get(environment, key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        return raw is "1" || bool.TryParse(raw, out var parsed) && parsed;
     }
 
     private static string? GetArgument(IReadOnlyDictionary<string, string?> arguments, string key) =>

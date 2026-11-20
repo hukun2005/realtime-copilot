@@ -53,6 +53,10 @@ class ErrorCode(
             'not_implemented',
             'rate_limited',
             'internal_error',
+            'invalid_state',
+            'capture_timeout',
+            'sidecar_unavailable',
+            'ticket_invalid',
         ]
     ]
 ):
@@ -68,6 +72,10 @@ class ErrorCode(
             'not_implemented',
             'rate_limited',
             'internal_error',
+            'invalid_state',
+            'capture_timeout',
+            'sidecar_unavailable',
+            'ticket_invalid',
         ],
         Field(
             description='稳定的机器可路由错误码；客户端不得依赖 message 文本。',
@@ -89,6 +97,7 @@ class HelloPayload(BaseModel):
     client_name: Annotated[
         str | None, Field(alias='clientName', max_length=64, min_length=1)
     ] = None
+    ticket: Annotated[str | None, Field(max_length=512)] = None
 
 
 class Capability(RootModel[str]):
@@ -135,8 +144,10 @@ class AudioStatusPayload(BaseModel):
     state: Literal['idle', 'starting', 'capturing', 'stopping', 'error']
     source: Literal['loopback', 'mic'] | None = None
     device_id: Annotated[str | None, Field(alias='deviceId', max_length=256)] = None
+    mode: Literal['loopback', 'mic', 'process'] | None = None
     since: Annotated[int, Field(ge=0)]
     error: Annotated[str | None, Field(max_length=500)] = None
+    error_code: Annotated[str | None, Field(alias='errorCode', max_length=64)] = None
 
 
 class LoopbackOptions(BaseModel):

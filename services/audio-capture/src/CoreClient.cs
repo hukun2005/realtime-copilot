@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RealtimeCopilot.AudioCapture.Protocol;
 
@@ -82,7 +83,7 @@ public sealed class CoreClient : IAsyncDisposable
 
         var hello = ProtocolCodec.Create(
             "hello",
-            new HelloPayload(_config.Token, _config.Role, _config.ClientVersion, _config.ClientName),
+            new HelloPayload(_config.Token, _config.Role, _config.ClientVersion, _config.ClientName, _config.Ticket),
             ProtocolCodec.NewRequestId());
         await SendAsync(hello, cancellationToken).ConfigureAwait(false);
 
@@ -282,10 +283,51 @@ public sealed class CoreClient : IAsyncDisposable
                 _logger.LogDebug("ignoring duplicate system.ready");
                 return;
 
+            case "capture.start":
+            case "capture.stop":
+            {
+                var handler = ControlReceived;
+                if (handler is null)
+                {
+                    _logger.LogWarning("control command {Type} received but no handler is registered", envelope.Type);
+                    return;
+                }
+
+                await handler(envelope.Type, envelope.Payload).ConfigureAwait(false);
+                return;
+            }
+
             default:
                 _logger.LogDebug("ignoring unsupported event {Type}", envelope.Type);
                 return;
         }
+    }
+
+    /// <summary>控制面事件回调：capture.start / capture.stop。</summary>
+    public Func<string, JsonElement, Task>? ControlReceived { get; set; }
+
+    /// <summary>发送一条控制结果事件（audio.status）。</summary>
+    /// <param name="payload">状态负载。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>发送完成的任务。</returns>
+    public Task SendStatusAsync(object payload, CancellationToken cancellationToken) =>
+        SendEventAsync("audio.status", payload, null, cancellationToken);
+
+    /// <summary>发送任意事件。</summary>
+    /// <param name="type">事件类型。</param>
+    /// <param name="payload">事件负载。</param>
+    /// <param name="requestId">关联请求 ID。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>发送完成的任务。</returns>
+    public async Task SendEventAsync(string type, object payload, string? requestId, CancellationToken cancellationToken)
+    {
+        if (_socket.State != WebSocketState.Open)
+        {
+            throw new CoreConnectionException("send_failed", "the core connection is not open");
+        }
+
+        var envelope = ProtocolCodec.Create(type, payload, requestId);
+        await SendAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SendAsync<TPayload>(EventEnvelope<TPayload> envelope, CancellationToken cancellationToken)

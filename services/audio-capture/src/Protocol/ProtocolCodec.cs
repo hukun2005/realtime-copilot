@@ -18,7 +18,8 @@ public sealed record HelloPayload(
     [property: JsonPropertyName("token")] string Token,
     [property: JsonPropertyName("role")] string Role,
     [property: JsonPropertyName("clientVersion")] string ClientVersion,
-    [property: JsonPropertyName("clientName")] string? ClientName);
+    [property: JsonPropertyName("clientName")] string? ClientName,
+    [property: JsonPropertyName("ticket")] string? Ticket = null);
 
 /// <summary>system.ready 事件载荷。</summary>
 public sealed record SystemReadyPayload(

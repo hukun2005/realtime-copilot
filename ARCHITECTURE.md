@@ -114,6 +114,45 @@ audio frame (20ms, 16k mono PCM16, source=loopback|mic)
 
 ---
 
+## 4A. 采集控制面（Phase 2-C）
+
+采集不再由 CLI 参数决定，而是由 Core 的状态机驱动。Core 是唯一权威：UI 只能发起命令，
+sidecar 的状态上报只用于确认，不能跳步。
+
+```text
+UI/bridge ──capture.start(requestId)──▶ Core.CaptureController
+                                          │ ① IDLE → STARTING
+                                          │ ② tickets.begin_session() + 签发票据
+                                          │ ③ spawn: dotnet audio-capture.dll（RTC_CAPTURE_CONTROL=1, RTC_AUDIO_TICKET=…）
+                                          ▼
+                                       sidecar ──hello(role=audio, ticket)──▶ Core 校验并 attach
+                                          │ ◀──capture.start(loopback/mic)────┘
+                                          │ ④ 打开 WASAPI → audio.status{starting}
+                                          │ ⑤ audio.status{capturing} ─────────▶ Core: STARTING → CAPTURING → 广播 UI
+                                          │ ⑥ 50fps 二进制音频帧 ──────────────▶ AudioHub 统计
+UI/bridge ──capture.stop(requestId)───▶ Core: CAPTURING → STOPPING → 下发 capture.stop
+                                          │ ◀──audio.status{idle}──────────────┘ → IDLE + end_session()
+```
+
+状态与合法迁移：
+
+| 状态 | 允许迁移 | 触发 |
+|---|---|---|
+| `idle` | `starting` | capture.start |
+| `starting` | `capturing` / `stopping` / `error` | sidecar 上报 / 启动超时 / spawn 失败 |
+| `capturing` | `stopping` / `error` | capture.stop / 设备丢失、sidecar 崩溃 |
+| `stopping` | `idle` / `error` | sidecar 上报 idle / 停止超时 |
+| `error` | `idle` / `starting` | capture.stop 复位 / 重试 start |
+
+约束（有对应测试）：
+
+- **不自动恢复**：Core 启动永远是 `idle`；没有 `capture.start` 不会拉起任何采集进程。
+- **幂等**：重复 start（已在 starting/capturing）不再 spawn；重复 stop（idle/stopping）只回状态。
+- **超时**：`capture.start_timeout_ms`（默认 8s）与 `capture.stop_timeout_ms`（默认 5s），超时进 `error` 并强杀进程。
+- **断连即停**：音频连接断开、sidecar 退出都进入 `error`（`audio_disconnected` / `sidecar_exited`），不会静默重连。
+- **票据**：每次 start 新签一次性票据，stop/崩溃/关闭即撤销（见 `SECURITY.md §7`）。
+- **设备变化**：控制模式下 sidecar 每 2s 检查默认端点；变化时上报 `device_changed` 并停止，不静默切换来源。
+
 ## 5. 延迟预算（设计约束，非实测结果）
 
 | 环节 | 预算 (P50) | 说明 |

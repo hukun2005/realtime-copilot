@@ -98,3 +98,5 @@ jobs:
         run: pwsh -NoProfile -File scripts/e2e-smoke.ps1 -Seconds 3
       - name: Audio frames end-to-end (60 s, with injected gaps)
         run: pwsh -NoProfile -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
+      - name: Capture control end-to-end (real Core + real sidecar, simulated source)
+        run: pwsh -NoProfile -File scripts/e2e-control.ps1 -Seconds 8 -Simulated
