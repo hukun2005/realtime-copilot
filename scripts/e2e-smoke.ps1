@@ -88,10 +88,23 @@ try {
         throw "client did not reach system.ready`nstdout:`n$log`nstderr:`n$stderr"
     }
 
-    $after = Invoke-RestMethod -Uri "http://127.0.0.1:$($runtime.port)/healthz" -TimeoutSec 5
-    if ($after.roles.audio -ne 1) { throw "expected 1 audio connection, got $($after.roles.audio)" }
-    Write-Host "[e2e] client connected; roles=$($after.roles | ConvertTo-Json -Compress)"
+    $after = $null
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        $candidate = Invoke-RestMethod -Uri "http://127.0.0.1:$($runtime.port)/healthz" -TimeoutSec 5
+        if ($candidate.roles.audio -eq 1) { $after = $candidate; break }
+        Start-Sleep -Milliseconds 200
+    }
 
+    if ($null -eq $after) {
+        $stderr = if (Test-Path $clientError) { Get-Content $clientError -Raw } else { "" }
+        $stdout = if (Test-Path $clientLog) { Get-Content $clientLog -Raw } else { "" }
+        $healthJson = (Invoke-RestMethod -Uri "http://127.0.0.1:$($runtime.port)/healthz" -TimeoutSec 5) | ConvertTo-Json -Compress
+        $exit = if ($client.HasExited) { $client.ExitCode } else { "running" }
+        throw "expected 1 audio connection`nhealth: $healthJson`nclient exit: $exit`nstdout:`n$stdout`nstderr:`n$stderr"
+    }
+
+    Write-Host "[e2e] client connected; roles=$($after.roles | ConvertTo-Json -Compress)"
     Write-Host "[e2e] PASS"
 }
 finally {
