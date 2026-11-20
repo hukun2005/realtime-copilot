@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "source": "loopback",
+  "frameDurationMs": 20,
+  "sequence": 1,
+  "captureTsNs": 1000000000,
+  "sampleRate": 16000,
+  "channels": 1,
+  "sampleFormat": 1,
+  "payloadLength": 640,
+  "totalBytes": 668,
+  "payloadSha256Prefix": "ramp"
+}

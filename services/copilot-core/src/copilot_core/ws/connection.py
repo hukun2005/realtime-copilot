@@ -39,6 +39,7 @@ from copilot_protocol import (
     parse_event,
 )
 
+from ..audio import AudioHub, AudioSession
 from ..config import AppConfig
 from ..security import tokens_equal
 
@@ -68,6 +69,7 @@ class EventConnection:
         version: str,
         logger: Any,
         on_authenticated: Callable[[str], None] | None = None,
+        audio_hub: AudioHub | None = None,
     ) -> None:
         """初始化连接对象。
 
@@ -87,7 +89,9 @@ class EventConnection:
         self._send_lock = asyncio.Lock()
         self._closed = False
         self._last_pong = time.monotonic()
-        self._binary_rejected = False
+        self._audio_hub = audio_hub
+        self._audio: AudioSession | None = None
+        self._frames_accepted = 0
         self.role: str | None = None
         self.client_version: str | None = None
 
@@ -107,6 +111,8 @@ class EventConnection:
             self.role = str(hello.payload.role.root)
             self.client_version = hello.payload.client_version
             self._log.info("client authenticated", extra={"role": self.role, "client": hello.payload.client_name})
+            if self.role == "audio" and self._audio_hub is not None:
+                self._audio = self._audio_hub.open_session()
             if self._on_authenticated is not None:
                 self._on_authenticated(self.role)
 
@@ -130,8 +136,18 @@ class EventConnection:
             self._log.exception("connection failed unexpectedly")
         finally:
             await self._close(CLOSE_NORMAL)
+            self._release_audio()
             if self.role is not None:
                 self._log.info("connection closed", extra={"role": self.role})
+
+    def _release_audio(self) -> None:
+        """连接结束时归还音频会话并记录本次流量的汇总。"""
+        if self._audio is None:
+            return
+        self._audio = None
+        if self._audio_hub is not None:
+            self._audio_hub.close_session()
+        self._log.info("audio stream stopped", extra={"frames": self._frames_accepted})
 
     # ------------------------------------------------------------------ 握手
 
@@ -188,7 +204,7 @@ class EventConnection:
             if text is not None:
                 await self._handle_text(text)
             elif data is not None:
-                await self._handle_binary(len(data))
+                await self._handle_binary(data)
 
     async def _handle_text(self, raw: str) -> None:
         if len(raw.encode("utf-8")) > self._config.server.max_message_bytes:
@@ -210,19 +226,46 @@ class EventConnection:
             return
         await self._dispatch(event)
 
-    async def _handle_binary(self, size: int) -> None:
-        """Phase 1 不接受音频帧；只拒绝一次，避免刷屏。"""
-        if self._binary_rejected:
+    async def _handle_binary(self, data: bytes) -> None:
+        """处理一条二进制音频帧。
+
+        角色不匹配属于连接级违规（关闭）；帧级错误只丢弃并计数，
+        持续刷错误帧或超速才会断开。
+        """
+        if self._closed:
             return
-        self._binary_rejected = True
-        self._log.warning("binary frame rejected", extra={"bytes": size})
-        await self._send(
-            make_system_error(
-                code="not_implemented",
-                message="binary audio frames arrive in Phase 2",
-                retryable=False,
+        if self._audio is None:
+            await self._reject_binary_role()
+            return
+
+        outcome = self._audio.handle(data)
+        if outcome.accepted:
+            self._frames_accepted += 1
+            if self._frames_accepted == 1:
+                self._log.info("audio stream started", extra={"bytes": len(data)})
+            return
+
+        if outcome.code == "frame_too_large":
+            await self._fail(
+                "invalid_payload",
+                "binary frame exceeds the configured maximum size",
+                CLOSE_TOO_LARGE,
             )
-        )
+            return
+
+        if self._audio.should_disconnect():
+            code = "rate_limited" if outcome.code == "rate_limited" else "invalid_payload"
+            message = "audio frames are arriving too fast" if code == "rate_limited" else "too many invalid audio frames"
+            self._log.warning(
+                "closing audio connection",
+                extra={"code": code, "accepted": self._frames_accepted},
+            )
+            await self._fail(code, message, CLOSE_POLICY)
+
+    async def _reject_binary_role(self) -> None:
+        """非 audio 角色发送二进制帧：明确拒绝并断开。"""
+        self._log.warning("binary frame from non-audio role", extra={"role": self.role})
+        await self._fail("invalid_role", "only the audio role may send binary frames", CLOSE_POLICY)
 
     async def _dispatch(self, event: ConcreteEvent) -> None:
         request_id = getattr(event, "request_id", None)
@@ -242,11 +285,31 @@ class EventConnection:
                 )
             )
             return
-        if isinstance(event, (CaptureStartEvent, CaptureStopEvent, AudioStatusEvent)):
+        if isinstance(event, (CaptureStartEvent, CaptureStopEvent)):
+            if self.role == "audio":
+                await self._send(
+                    make_system_error(
+                        code="invalid_role",
+                        message="the audio role cannot control capture",
+                        retryable=False,
+                        request_id=request_id,
+                    )
+                )
+                return
             await self._send(
                 make_system_error(
                     code="not_implemented",
-                    message=f"{event.type} is implemented in Phase 2",
+                    message=f"{event.type} is implemented in Phase 2-B",
+                    retryable=False,
+                    request_id=request_id,
+                )
+            )
+            return
+        if isinstance(event, AudioStatusEvent):
+            await self._send(
+                make_system_error(
+                    code="unsupported_event",
+                    message="audio.status is server-to-client",
                     retryable=False,
                     request_id=request_id,
                 )

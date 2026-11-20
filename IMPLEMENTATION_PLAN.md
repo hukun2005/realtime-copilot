@@ -96,11 +96,50 @@ pnpm -C apps/desktop typecheck
 
 ---
 
-## Phase 2 — Windows 音频采集
+## Phase 2-A — 音频二进制协议与 Core 接收通道（已完成）
 
-**目标**：稳定采集系统输出音频；在支持的平台上尝试进程级采集；可选麦克风；设备热插拔与静音可诊断。
+**目标**：让模拟音频通过真实 C# 客户端以 Binary Frame 送达真实 Python Core，完成解析、权限、校验、统计与错误处理。不实现 WASAPI、不接 ASR。
 
 **依赖**：Phase 1。
+
+**交付**
+
+| 路径 | 内容 |
+|---|---|
+| `packages/protocol/audio-frame.v1.md` | 协议文档：28 字节头、字段约束、序号/时间戳语义、兼容与失败行为 |
+| `packages/protocol/fixtures/audio/` | 7 个二进制样本 + 元数据；由 `scripts/make-audio-fixtures.py` 确定性生成 |
+| `services/copilot-core/src/copilot_core/audio/` | `frame.py` 解析/编码、`session.py` 连续性/限速、`sink.py`、`stats.py`、`hub.py` |
+| `services/copilot-core/src/copilot_core/ws/connection.py` | 二进制分发、角色限制、断开阈值、会话生命周期 |
+| `services/audio-capture/src/Audio/` | `AudioFrameCodec`、`SimulatedAudioSource`、`AudioStreamer`、`SimulationOptions` |
+| `scripts/e2e-audio.ps1` | 真实 Core + 真实客户端 60 秒音频传输与丢帧检测 |
+| `.github/workflows/ci.yml` | Windows 作业新增 60 秒音频端到端 |
+
+**验收结果**（实测，见 `BUILD_LOG.md`）
+
+- [x] 协议文档完整，头部布局、字节序、长度上限、版本兼容与失败行为均有定义。
+- [x] Python 解析真实 C# 发送的帧：668 字节、字段与 fixtures 一致。
+- [x] 60 秒稳定传输：2995 帧，与发送数完全一致。
+- [x] 帧数量统计正确（`frames` / `bytes` / `sinkFrames`）。
+- [x] 丢帧检测正确：主动跳过 6 帧，Core 报告 `gaps=6`。
+- [x] 非 audio 角色发送二进制帧被拒绝（`invalid_role` + 1008）。
+- [x] 超大帧被拒绝（`invalid_payload` + 1009）。
+- [x] Phase 1 全部测试继续通过。
+
+**测试命令**
+
+```bash
+uv run pytest services/copilot-core/tests -q
+dotnet test services/audio-capture/tests -c Release
+pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
+```
+
+---
+
+## Phase 2-B — Windows 音频采集（WASAPI）
+
+**目标**：把模拟源换成真实采集：稳定捕获系统输出音频；在支持的平台上尝试进程级采集；可选麦克风；设备热插拔与静音可诊断。
+
+**依赖**：Phase 2-A（协议与接收通道已就绪，直接替换 `SimulatedAudioSource`）。
 
 **文件**
 
@@ -110,10 +149,9 @@ pnpm -C apps/desktop typecheck
 | `services/audio-capture/src/Capture/ProcessLoopbackCapture.cs` | `ActivateAudioInterfaceAsync` + `AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK` |
 | `services/audio-capture/src/Capture/MicrophoneCapture.cs` | `WasapiCapture`，默认关闭 |
 | `services/audio-capture/src/Dsp/Resampler.cs` | 任意混音格式 → 16k mono PCM16（`WdlResamplingSampleProvider`） |
-| `services/audio-capture/src/Dsp/Framer.cs` | 20ms 分帧 + 时间戳 |
+| `services/audio-capture/src/Dsp/Framer.cs` | 20ms 分帧 + `MonotonicClock` 时间戳 |
 | `services/audio-capture/src/Diagnostics/SilenceDetector.cs` | -60dBFS 连续 5s 判定 |
-| `services/audio-capture/src/Clients/CoreClient.cs` | WS 客户端、二进制帧、重连 |
-| `services/audio-capture/tests/*` | 分帧、重采样、静音检测的单元测试 |
+| `services/audio-capture/src/Audio/AudioStreamer.cs` | 由模拟源改为可注入的 `IAudioFrameSource` |
 | `tools/capture-probe.ps1` | 枚举设备与进程、实测可用性 |
 
 **任务**
@@ -122,10 +160,9 @@ pnpm -C apps/desktop typecheck
 2. 进程级 loopback：先 `ActivateAudioInterfaceAsync`，失败则**明确报 `process_loopback_unsupported` 并回退设备级**，不得静默降级。
 3. 混音格式 → 16k mono 的重采样与分帧；帧时间戳使用 `Stopwatch`/QPC 单调时钟。
 4. 双路（loopback + mic）各自独立流，带 `source` 标记，不做混音。
-5. 设备热插拔：`IMMNotificationClient` → `audio.device-changed`。
+5. 设备热插拔：`IMMNotificationClient` → 重连采集端点。
 6. 静音诊断（U4：会议软件受保护音频路径）。
 7. 崩溃恢复：进程级 watchdog，最多 3 次指数退避重连 Core。
-8. 用腾讯会议、微信 PC 版、浏览器播放三组实机验证并记录到 `BUILD_LOG.md`。
 
 **验收标准**
 
@@ -134,7 +171,7 @@ pnpm -C apps/desktop typecheck
 - [ ] 腾讯会议/微信/浏览器三场景均能采到音频（实机记录，含失败场景）。
 - [ ] 进程级采集不可用时，UI 明确显示"整机输出采集"，且日志有原因。
 - [ ] 拔插耳机后 2s 内自动切换并继续出帧。
-- [ ] 静音 5s 触发 `capture.silent`。
+- [ ] 静音 5s 触发静音诊断。
 - [ ] 采集进程被强杀后，supervisor 在 3s 内拉起并恢复。
 
 **测试命令** `[计划]`
@@ -142,7 +179,7 @@ pnpm -C apps/desktop typecheck
 ```bash
 dotnet test services/audio-capture/tests -c Release
 pwsh -File tools/capture-probe.ps1 -ListDevices
-pwsh -File tools/capture-probe.ps1 -Capture 60 -Out .artifacts/cap.wav   # 60s 回归
+pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 0   # 真实采集替换模拟源后
 ```
 
 **风险**：R5（Win10 build 20348 门槛）、R6（受保护音频）、U3、U4。若进程级采集在目标机器不可用，产品文案改为"整机输出采集"，并评估虚拟声卡方案（不在 v1 范围）。

@@ -110,14 +110,15 @@ async def test_capture_start_is_not_implemented(live_server) -> None:  # type: i
         assert error["requestId"] == "req_capture0000000000000000"
 
 
-async def test_binary_frames_are_rejected(live_server) -> None:  # type: ignore[no-untyped-def]
+async def test_binary_frames_from_ui_role_are_rejected(live_server) -> None:  # type: ignore[no-untyped-def]
     async with websockets.connect(live_server.url) as socket:
         await socket.send(hello_event(live_server.token))
         await recv_until(socket, "system.ready")
 
         await socket.send(b"\x00\x01\x02\x03")
         error = await recv_until(socket, "system.error")
-        assert error["payload"]["code"] == "not_implemented"
+        assert error["payload"]["code"] == "invalid_role"
+        await expect_closed(socket)
 
 
 async def test_oversized_message_closes_connection(live_server) -> None:  # type: ignore[no-untyped-def]

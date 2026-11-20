@@ -11,8 +11,10 @@ Windows 音频进程的 Phase 1 骨架：**只做连接与协议**，不采集�
 - Ctrl+C 优雅关闭（发送 Close 帧并释放 socket）
 - JSON Lines 日志（stdout）
 - NAudio 设备枚举（`DeviceCatalog`，仅 Windows 且不打开音频流）
+- **音频二进制帧**：`AudioFrameCodec` 序列化/校验（与 Python 错误码一致）、`SimulatedAudioSource` 生成确定性 20ms 帧、`AudioStreamer` 按帧率发送并支持 `--drop-every` 注入丢帧
+- 模拟发送：`--simulate-audio --seconds=N --fps=50 --drop-every=500`
 
-## 未实现（Phase 2）
+## 未实现（Phase 2-B）
 
 WASAPI loopback / 进程级 loopback、麦克风、重采样、分帧、二进制帧上报、设备热插拔。
 帧传输接口已预留在 `src/Capture/IAudioFrameSource.cs`。

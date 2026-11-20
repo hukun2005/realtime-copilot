@@ -175,9 +175,68 @@ Node 24.22.1 · pnpm 11.28.5 · Python 3.13.15 · .NET SDK 10.0.404（运行时 
 
 Phase 2：实现 `IAudioFrameSource` 的 WASAPI 设备级采集（先不做进程级），把 20ms PCM16 帧通过二进制 WebSocket 帧发给 Core，并在 Core 侧统计帧率与丢帧；随后按 U3/U4 在两个 Windows 版本上实测腾讯会议与微信。
 
+## 2026-11-20 · Phase 2-A：音频二进制协议与 Core 接收通道
+
+分支：`feature/phase-2a-audio-protocol`（基线 `cb30f39`；基线测试 77 Python / 27 C# / 22 协议 / 11 桌面 全绿）。
+
+### 协议
+
+28 字节小端头 + 640 字节 PCM16LE = 668 字节/帧，一条 WebSocket Binary Message 一帧。
+字段：`protocolVersion`、`source`、`frameDurationMs`、`sequence`、`captureTsNs`、`sampleRate`、`channels`、`sampleFormat`、`payloadLength`。
+完整定义见 `packages/protocol/audio-frame.v1.md`；跨语言 fixtures 由 `packages/protocol/scripts/make-audio-fixtures.py` 确定性生成（7 个 `.bin` + 元数据）。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -q` | **113 passed, 1 skipped**（新增 36 个音频测试） |
+| `dotnet build services/audio-capture -c Release` | 0 warning / 0 error |
+| `dotnet test services/audio-capture/tests -c Release` | **55 passed**（新增 28 个） |
+| `pnpm -C packages/protocol test` | 22 passed |
+| `pnpm -C apps/desktop test` | 11 passed |
+| `pnpm -r --if-present run typecheck` | 通过 |
+| `pwsh -File scripts/e2e-smoke.ps1` | PASS（握手链路未回归） |
+| `pwsh -File scripts/e2e-audio.ps1 -Seconds 10 -DropEvery 50` | PASS：sent=491，core frames=491，gaps=10 |
+| `pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500` | **PASS：sent=2995，skipped=6，core frames=2995，bytes=1,916,800，gaps=6，invalid=0，duplicates=0，rateLimited=0，sessions=0** |
+
+C# 序列化结果与 `valid-frame.bin` **逐字节相同**（`AudioFrameCodecTests.Serialize_MatchesCrossLanguageFixture`），说明两端对布局与 ramp 负载的理解一致。
+
+### 设计决策
+
+1. **不加 magic 字段**：WebSocket 已提供消息边界；严格的长度/版本/采样率/负载校验足以拒绝随机字节，头部保持 28 字节。
+2. **序号按 source 分轨**：同一连接可同时发 loopback 与 mic，各自从任意起点递增，`uint32` 回绕；判定用 `(seq - last) mod 2^32`，一半窗口内视为丢帧，否则视为重复/乱序。
+3. **帧级错误不断连**：实时音频丢一帧优于断流；1 秒窗口内无效帧 > 25 或超速 > 10 次才断开。
+4. **统计放 `/healthz` 而不是新增事件类型**：避免在本阶段扩展事件枚举；桌面端已有轮询路径，后续需要实时推送时再加 `audio.stats` 事件。
+5. **新增 `rate_limited` 错误码**：语义比复用 `invalid_payload` 准确，schema 已重新生成。
+6. **短期音频 ticket 只设计不实现**：需要 `capture.start` 的请求-响应通道（Phase 2-B），强行实现会破坏 `runtime.json` 启动方式；`SECURITY.md §7` 记录了设计与未实现原因。
+7. **模拟源用确定性 ramp**：与 fixtures 同算法，跨平台字节一致，便于跨语言断言；真实 WASAPI 在 2-B 替换。
+
+### 遇到的问题与修复
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| 日志泄露测试整包运行失败、单独跑通过 | `caplog` 同时抓到 `websockets`/`httpcore` 的调试日志（含 JSON 的 `payload` 字段） | 断言只针对 `copilot_core` 命名空间的记录，并先断言"确实抓到了应用日志" |
+| C# 测试编译失败：`AudioFrame` 无 `sequence` 参数 | 记录参数是 PascalCase | 改为 `Sequence:` / `CaptureTimestampNs:` |
+| C# 测试另一处编译失败：`out _` 类型冲突 | lambda 参数命名为 `_`（CancellationToken），`out _` 解析到它 | 参数改名 `token`，改用 `out var parseError` |
+| 裸开关 `--simulate-audio` 被配置解析拒绝 | `AppConfig.ParseArguments` 只接受 `--key=value` | 裸开关按 `"true"` 记录，由消费方解释 |
+| 二进制帧从 `ui` 角色发送时旧测试期望 `not_implemented` | 行为已按安全要求改为拒绝并断开 | 更新为 `invalid_role` + 连接关闭（断言更强，不是放宽） |
+
+### 未完成 / 风险
+
+- 真实 WASAPI 采集未实现（Phase 2-B）；`capture.start` / `capture.stop` 仍返回 `not_implemented`。
+- 角色是自报的，不等同进程身份；短期 ticket 仅有设计。
+- 进程级 loopback 的 Windows 版本门槛（U3）与受保护音频路径（U4）仍需实机验证。
+- 本轮为 Windows 本地验证；CI（含 60 秒音频作业）在推送后确认。
+
+### 下一步
+
+Phase 2-B：用 `WasapiLoopbackCapture` 替换 `SimulatedAudioSource`，接入重采样与 20ms 分帧，保持 `IAudioFrameSource` 与 `AudioStreamer` 的接口不变；随后在 Win10 22H2 与 Win11 上实测腾讯会议/微信。
+
 ### 变更记录
 
 | 日期 | 变更 |
 |---|---|
 | 2026-11-20 | 初始版本：完成 Phase 0 审查与全部设计文档 |
 | 2026-11-20 | Phase 1：协议、Core、音频骨架、桌面骨架、CI、安全文档 |
+| 2026-11-20 | Phase 2-A：音频二进制协议、Core 接收与统计、C# 发送与模拟流、60 秒端到端 |

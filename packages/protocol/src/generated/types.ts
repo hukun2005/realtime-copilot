@@ -41,6 +41,7 @@ export type ErrorCode =
   | 'unsupported_event'
   | 'invalid_role'
   | 'not_implemented'
+  | 'rate_limited'
   | 'internal_error'
 
 export interface HelloEvent {

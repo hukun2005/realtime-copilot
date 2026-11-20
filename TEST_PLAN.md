@@ -107,7 +107,32 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 ---
 
-## 5. 安全测试
+## 5. 音频帧通道测试（Phase 2-A）
+
+协议定义见 `packages/protocol/audio-frame.v1.md`。三层覆盖：
+
+| 层 | 内容 | 位置 |
+|---|---|---|
+| 结构 | 头部字段、字节序、长度、错误码；跨语言 fixtures 往返 | `tests/test_audio_frame.py`、`tests/AudioFrameCodecTests.cs` |
+| 会话 | 序号连续性/回绕/重复、时间戳回退、速率限制、断开阈值 | `tests/test_audio_session.py`、`tests/AudioStreamerTests.cs` |
+| 通道 | 真实 uvicorn + 真实 WS 客户端：接收、丢帧、超限、角色拒绝、会话释放、日志不泄露 | `tests/test_ws_audio.py` |
+
+**跨语言一致性**：Python 与 C# 读取同一份 `fixtures/audio/*.bin`，错误码字符串必须完全一致（`unsupported_version`、`invalid_sample_rate`、`payload_length_mismatch` 等）。C# 用 `SimulatedAudioSource` 生成 seq=1、ts=1e9 的帧，序列化结果必须与 `valid-frame.bin` 逐字节相同。
+
+**压力与稳定性**：
+
+- 单元层：令牌桶在 200fps 配置下允许 250 突发，超出即计数并请求断开。
+- 通道层：400 帧瞬时洪泛触发 `rate_limited` 并断开；30 个无效帧触发 `invalid_payload` 断开。
+- 端到端：`scripts/e2e-audio.ps1 -Seconds 60` 以 50fps 连续发送 60 秒，核对帧数、字节数、丢帧、无效帧、重复帧与会话释放；CI 的 Windows 作业执行同一命令。
+
+**判定标准**（当前实测值见 BUILD_LOG）：
+
+- Core 收到帧数 == 客户端发出帧数，误差为 0；
+- `gaps` == 主动跳过的帧数（末帧被跳过时允许少 1）；
+- `invalid` / `duplicates` / `rateLimited` 均为 0；
+- 连接结束后 `sessions` 回到 0，统计不清零。
+
+## 6. 安全测试
 
 | 编号 | 断言 | 方式 |
 |---|---|---|
@@ -123,10 +148,14 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 | S10 | 注入 Harness 需显式开启且告知 | 测试：默认配置下不产生 `realtime-copilot` source 消息 |
 | S11 | 卸载插件无残留 | dispose 断言：socket 关闭、定时器清空、服务移除 |
 | S12 | 诊断包不含隐私 | 脚本解包并扫描 key/转写文本关键字 |
+| S13 | 只有 `role=audio` 能发音频帧 | 集成测试：`ui` 角色发送二进制帧收到 `invalid_role` 并断开 |
+| S14 | 音频帧不落盘、不进日志 | 集成测试断言应用日志不含 token / PCM / payload；仓库中无音频写入代码路径 |
+| S15 | 洪泛与超大帧被拒绝 | 400 帧瞬时洪泛 → `rate_limited` 断开；5000 字节消息 → `invalid_payload` + 1009 |
+| S16 | 音频角色不能下发命令 | 集成测试：`role=audio` 发 `capture.start` 收到 `invalid_role`，且音频流不断 |
 
 ---
 
-## 6. Harness 兼容矩阵
+## 7. Harness 兼容矩阵
 
 | bridge 版本 | Harness 版本 | 状态 | 验证内容 |
 |---|---|---|---|
@@ -144,12 +173,13 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 ---
 
-## 7. 阶段门禁汇总
+## 8. 阶段门禁汇总
 
 | 阶段 | 必须绿的门禁 |
 |---|---|
 | P1 | L1+L2 全绿；启动/配置/鉴权测试；三语言 CI |
-| P2 | sidecar 单测；30 分钟稳定性；三场景实机记录；S1/S5 |
+| P2-A | 音频帧单测 + 会话测试 + 真实通道测试；60 秒端到端（帧数/丢帧一致）；角色限制 |
+| P2-B | sidecar 真实采集单测；30 分钟稳定性；三场景实机记录；S1/S5；S6/S7 |
 | P3 | ASR 契约测试；WER 与定稿延迟报告；断流恢复 |
 | P4 | 检测评测报告；误报清单；性能 P95 |
 | P5 | mock + 真 key 测试；**首份端到端延迟报告**；取消正确性 |
@@ -161,7 +191,7 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 ---
 
-## 8. CI 分层
+## 9. CI 分层
 
 | lane | 触发 | 内容 | 目标时长 |
 |---|---|---|---|
@@ -173,7 +203,7 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 
 ---
 
-## 9. 明确不测试的内容（及其理由）
+## 10. 明确不测试的内容（及其理由）
 
 - **真实会议软件的音频路径**：无法在 CI 自动化，只能实机记录（Phase 2 清单），结论写入 `BUILD_LOG.md`。
 - **DeepSeek 服务的 SLA**：不在我们控制内；只测我们自己的超时与降级。
@@ -182,7 +212,7 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 
 ---
 
-## 10. 回归清单（每次合并前人工过一遍）
+## 11. 回归清单（每次合并前人工过一遍）
 
 1. 采集开关是否需要两次点击才能生效？
 2. 停止采集后悬浮窗是否仍显示"采集中"？

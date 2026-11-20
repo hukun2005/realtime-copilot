@@ -250,16 +250,13 @@ createUserMessage({
 
 ### 2.5 音频帧（`role=audio`）
 
-二进制帧布局（小端）：
+音频走独立的二进制协议，完整定义见 [`packages/protocol/audio-frame.v1.md`](packages/protocol/audio-frame.v1.md)。这里只记录与事件协议的边界：
 
-```text
-offset size  field
-0      1     source      0=loopback 1=mic
-1      1     flags       保留，v1 必须为 0
-2      2     reserved    0
-4      8     captureTsNs 该帧最后一采样的单调时钟（ns），用于延迟测量
-12     N     pcm         16 kHz, mono, PCM16LE，长度 = frameMs*16*2
-```
+- 一条 WebSocket Binary Message 恰好一帧，28 字节小端头 + 640 字节 PCM16LE（共 668 字节）；
+- 头部包含 `protocolVersion`、`source`、`frameDurationMs`、`sequence`、`captureTsNs`、`sampleRate`、`channels`、`sampleFormat`、`payloadLength`；
+- 只有 `role=audio` 的连接可以发送；其他角色发送会被 `invalid_role` 拒绝并断开；
+- 帧级错误只丢弃并计数（`/healthz` 的 `audio` 字段），持续违规才断开；
+- PCM 不进 JSON、不进日志、不落盘。
 
 控制帧（文本）：`audio.ready { device, sampleRate, frameMs }`、`audio.error { code, message }`、`audio.device-changed { deviceId }`。
 
