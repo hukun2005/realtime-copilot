@@ -190,6 +190,31 @@ public sealed class CoreClient : IAsyncDisposable
         }
     }
 
+    /// <summary>发送一帧音频（Binary Message）。</summary>
+    /// <param name="payload">已编码的帧字节。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>发送完成的任务。</returns>
+    /// <exception cref="CoreConnectionException">连接已关闭或发送失败。</exception>
+    public async Task SendBinaryAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (_socket.State != WebSocketState.Open)
+        {
+            throw new CoreConnectionException("send_failed", "the core connection is not open");
+        }
+
+        try
+        {
+            await _socket.SendAsync(payload, WebSocketMessageType.Binary, endOfMessage: true, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is WebSocketException or ObjectDisposedException or InvalidOperationException)
+        {
+            throw new CoreConnectionException("send_failed", $"could not send audio frame: {exception.Message}", exception);
+        }
+    }
+
     /// <summary>发送普通关闭帧。</summary>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>表示关闭流程的任务。</returns>

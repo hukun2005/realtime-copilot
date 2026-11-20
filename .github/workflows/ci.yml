@@ -96,3 +96,5 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Real Core + real C# client
         run: pwsh -NoProfile -File scripts/e2e-smoke.ps1 -Seconds 3
+      - name: Audio frames end-to-end (60 s, with injected gaps)
+        run: pwsh -NoProfile -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500

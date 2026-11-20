@@ -34,6 +34,7 @@
         "unsupported_event",
         "invalid_role",
         "not_implemented",
+        "rate_limited",
         "internal_error"
       ],
       "description": "稳定的机器可路由错误码；客户端不得依赖 message 文本。"

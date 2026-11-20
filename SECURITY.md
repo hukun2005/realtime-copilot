@@ -32,6 +32,8 @@
 
 鉴权失败的行为：回一条 `system.error{code:"auth_failed"}` 后关闭连接；2 秒内未发送 `hello` 回 `auth_timeout` 并关闭（`server.auth_timeout_ms`）。
 
+**所有角色共用同一令牌**：`ui` / `bridge` / `audio` 只在 `hello.payload.role` 上区分，服务端按角色限制可用消息类型（§7），但不校验进程身份。短期音频凭证的设计与未实现原因见 §7。
+
 ## 4. 文件保护：Windows ACL 与 DPAPI 的真实取舍
 
 `runtime.json` 位于数据目录（Windows 默认 `%LOCALAPPDATA%\RealTimeCopilot`）。
@@ -66,25 +68,63 @@
 - 主进程只注册 `copilot:snapshot`、`copilot:audio`、`copilot:reconnect` 三个 handler 与一个 `copilot:core-status` 推送通道。
 - 页面通过自定义协议 `copilot://app/` 加载（`protocol.handle`，越界路径返回 403），并携带 CSP：`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'`。使用 `file://` 时 `'self'` 无法匹配打包后的模块脚本，因此没有采用它。
 
-## 7. 残余风险（明确承认）
+## 7. 音频通道权限与限制
+
+音频帧走独立的二进制协议（`packages/protocol/audio-frame.v1.md`）。当前强制执行的规则：
+
+| 规则 | 实现位置 | 违反时行为 |
+|---|---|---|
+| 只有 `role=audio` 可以发送二进制帧 | `EventConnection._handle_binary` | `system.error{code:"invalid_role"}` + 关闭 1008 |
+| `role=audio` 不能下发 `capture.start` / `capture.stop` | `_dispatch` | `invalid_role`，但不中断音频流 |
+| 单帧最大 4096 字节 | `AudioConfig.max_frame_bytes` | `invalid_payload` + 关闭 1009 |
+| 每秒最多 200 帧、突发 250 | 令牌桶（`AudioSession`） | 计数 `rate_limited`；1 秒内超过 10 次关闭 1008 |
+| 1 秒内无效帧超过 25 | `AudioSession.should_disconnect` | `invalid_payload` + 关闭 1008 |
+| 帧级错误不中断音频 | `AudioSession.handle` | 丢弃并计数，连接保留 |
+| PCM 不落盘、不进日志 | `InMemoryAudioSink` 只计数 | 仓库中不存在写音频文件的代码路径 |
+
+**角色是自报的**：`hello.payload.role` 由客户端声明，服务端只做白名单校验，**不能证明对端是哪个操作系统进程**。持有 `runtime.json` 令牌的同用户进程可以声明自己为 `audio` 并发送帧。
+
+### 短期音频凭证（设计，尚未实现）
+
+目标：把"知道令牌"与"被授权发送音频"分开，并给音频通道一个短时效、可撤销的凭证。
+
+```text
+UI(role=ui) --capture.start--> Core
+Core: ticket = HMAC-SHA256(server_secret, sessionId | expiry | nonce | role=audio)
+      系统返回 { ticket, expiresAt }（通过 capture.start 的响应事件携带）
+audio 进程: hello.payload.ticket = <ticket>
+Core: 校验 HMAC、expiry（≤60s）、一次性使用（nonce 已消费集合）
+```
+
+未在 Phase 2-A 实现的原因（明确记录，避免误以为已具备）：
+
+1. 需要一个"命令 → 响应"通道来下发 ticket；`capture.start` 目前仍是 `not_implemented`，随 Phase 2-B 的采集控制一起实现。
+2. 凭证不能替换 `runtime.json` 的启动方式：音频进程仍要读 `runtime.json` 拿地址与基础令牌，ticket 只是在其上增加一层短期授权，且必须允许"UI 尚未启动时音频进程仅连接、不发送"的状态。
+3. 需要先在协议里增加可选字段（`HelloPayload.ticket`），并保证旧客户端（不带 ticket）在配置关闭校验时仍可用。
+
+在实现之前，本节所述风险按 §8 的残余风险对待。
+
+## 8. 残余风险（明确承认）
 
 | 风险 | 说明 | 缓解 |
 |---|---|---|
-| 同用户进程可读 `runtime.json` | Windows 上同用户的其他程序可以读取该文件并连接 Core | 本阶段接受；Core 目前只暴露状态与健康检查。Phase 2 起音频控制会要求 `role=audio` 并与进程身份绑定 |
+| 同用户进程可读 `runtime.json` | Windows 上同用户的其他程序可以读取该文件并连接 Core | 本阶段接受；令牌每次启动轮换 + ACL + 只绑定回环。控制面（`capture.*`）目前仍是占位实现，尚未产生真实权限 |
+| **角色自报，不等于进程身份** | 任何拿到令牌的同用户进程都能声明 `role=audio` 并发送音频帧 | 已实施：只有 `audio` 角色可发二进制帧、速率上限、单帧上限、统计可观测；待实施：§7 的短期 ticket（Phase 2-B） |
 | 令牌明文落盘 | 见 §4 的取舍 | 每次启动轮换 + ACL + 回环 |
 | 无 TLS | 回环流量不加密 | 数据不出本机；不引入自签证书以免增加运维复杂度 |
-| 无速率限制 | 本阶段连接数极少 | Phase 2 前加入每连接消息速率上限 |
+| 音频内容可被同机进程读取 | Core 在内存中短暂持有 PCM 帧 | 默认不落盘、不进日志；同用户内存读取属于操作系统级信任边界，本阶段不声称防护 |
 
-## 8. 明确不做
+## 9. 明确不做
 
 **不存在**向会议软件注入文字、模拟键鼠、自动发言的代码路径。`package.json` / `*.csproj` 中没有 `robotjs`、`nut.js`、`SendInput` 封装等依赖；后续阶段也不会加入——这是产品约束，不是待办。
 
-## 9. 资源释放
+## 10. 资源释放
 
 - WebSocket：连接结束后 `finally` 中关闭；服务端对已消失对端做 best-effort 关闭。
+- 音频会话：连接结束、异常或角色拒绝时归还 `AudioHub` 的会话计数，统计保留（`test_audio_disconnect_releases_session` 断言）。
 - SQLite：应用 lifespan 结束时 `close()`；WAL 在重启后仍可读。
-- 子进程：`scripts/e2e-smoke.ps1` 在 `finally` 中终止 Core 与客户端；桌面端 `window-all-closed` 时断开连接并退出。
+- 子进程：`scripts/e2e-smoke.ps1` / `scripts/e2e-audio.ps1` 在 `finally` 中终止 Core 与客户端；桌面端 `window-all-closed` 时断开连接并退出。
 
-## 10. 报告问题
+## 11. 报告问题
 
 这是个人项目；如发现安全问题，请通过 GitHub Issues 描述复现步骤，不要在公开 issue 中粘贴真实令牌或会议内容。

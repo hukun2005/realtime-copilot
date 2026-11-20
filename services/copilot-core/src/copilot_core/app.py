@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from copilot_protocol import PROTOCOL_VERSION
 
+from .audio import AudioHub
 from .config import AppConfig
 from .logging_setup import get_logger
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
@@ -87,6 +88,7 @@ def create_app(
     app.state.connections = 0
     app.state.roles = {}
     app.state.port = 0
+    app.state.audio = AudioHub(config.audio)
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
@@ -110,6 +112,7 @@ def create_app(
             "uptimeMs": uptime_ms,
             "connections": int(app.state.connections),
             "roles": dict(app.state.roles),
+            "audio": app.state.audio.snapshot(),
             "database": "ok" if database_ok else "error",
         }
         return JSONResponse(body, status_code=200 if database_ok else 503)
@@ -132,6 +135,7 @@ def create_app(
                 version=version,
                 logger=logger,
                 on_authenticated=on_authenticated,
+                audio_hub=app.state.audio,
             ).run()
         finally:
             app.state.connections -= 1

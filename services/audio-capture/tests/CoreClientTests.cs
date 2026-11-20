@@ -152,6 +152,50 @@ public sealed class CoreClientTests
     }
 
     [Fact]
+    public async Task SendBinaryAsync_DeliversFrameToServer()
+    {
+        var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var server = await TestCoreServer.StartAsync(async (socket, cancellationToken) =>
+        {
+            var helloJson = await TestCoreServer.ReceiveTextAsync(socket);
+            var hello = ProtocolCodec.DeserializeEnvelope(helloJson!)!;
+            var ready = ProtocolCodec.Create(
+                "system.ready",
+                new SystemReadyPayload("0.1.0", ProtocolCodec.Version, [], null),
+                hello.RequestId);
+            await SendAsync(socket, ProtocolCodec.Serialize(ready), cancellationToken);
+
+            var audio = await TestCoreServer.ReceiveBinaryAsync(socket);
+            received.TrySetResult(audio ?? []);
+            await HoldAsync(socket, cancellationToken);
+        });
+
+        await using var client = new CoreClient(ConfigFor(server.WebSocketUrl), NullLogger<CoreClient>.Instance);
+        await client.ConnectAsync(CancellationToken.None);
+
+        var source = new RealtimeCopilot.AudioCapture.Audio.SimulatedAudioSource();
+        var frame = source.Next(1_000_000_000);
+        await client.SendBinaryAsync(RealtimeCopilot.AudioCapture.Audio.AudioFrameCodec.Serialize(frame), CancellationToken.None);
+
+        var payload = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(RealtimeCopilot.AudioCapture.Audio.AudioFrameCodec.FrameBytes, payload.Length);
+        Assert.True(RealtimeCopilot.AudioCapture.Audio.AudioFrameCodec.TryParse(payload, out var parsed, out _));
+        Assert.Equal(frame.Sequence, parsed.Sequence);
+    }
+
+    [Fact]
+    public async Task SendBinaryAsync_FailsWhenSocketIsClosed()
+    {
+        var client = new CoreClient(ConfigFor("ws://127.0.0.1:1/ws"), NullLogger<CoreClient>.Instance);
+        await using var disposable = client;
+
+        var exception = await Assert.ThrowsAsync<CoreConnectionException>(
+            () => client.SendBinaryAsync(new byte[4], CancellationToken.None));
+        Assert.Equal("send_failed", exception.Code);
+    }
+
+    [Fact]
     public async Task Connect_FailsWhenNothingIsListening()
     {
         var config = ConfigFor("ws://127.0.0.1:1/ws/v1/events") with

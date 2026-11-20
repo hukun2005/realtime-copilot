@@ -78,6 +78,23 @@ class StorageConfig(BaseModel):
     path: str | None = None
 
 
+class AudioConfig(BaseModel):
+    """音频二进制帧的接收限制（见 ``packages/protocol/audio-frame.v1.md``）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: 单帧上限；最小 668（28 字节头 + 640 字节 PCM）。
+    max_frame_bytes: int = Field(default=4096, ge=668, le=65_536)
+    #: 每秒允许的帧数；19 帧/秒足以覆盖 20ms 帧的 3 倍抖动余量。
+    max_frames_per_second: int = Field(default=200, ge=20, le=2000)
+    #: 令牌桶突发容量。
+    burst_frames: int = Field(default=250, ge=20, le=5000)
+    #: 1 秒窗口内允许的无效帧数，超过即断开。
+    max_invalid_per_second: int = Field(default=25, ge=1, le=1000)
+    #: 1 秒窗口内允许的超速次数，超过即断开。
+    max_rate_violations_per_second: int = Field(default=10, ge=1, le=1000)
+
+
 class AppConfig(BaseModel):
     """完整配置。"""
 
@@ -88,6 +105,7 @@ class AppConfig(BaseModel):
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    audio: AudioConfig = Field(default_factory=AudioConfig)
 
     def database_path(self, data_dir: Path) -> Path:
         """返回 SQLite 绝对路径。

@@ -51,6 +51,7 @@ class ErrorCode(
             'unsupported_event',
             'invalid_role',
             'not_implemented',
+            'rate_limited',
             'internal_error',
         ]
     ]
@@ -65,6 +66,7 @@ class ErrorCode(
             'unsupported_event',
             'invalid_role',
             'not_implemented',
+            'rate_limited',
             'internal_error',
         ],
         Field(

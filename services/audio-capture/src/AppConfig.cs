@@ -174,7 +174,9 @@ public sealed record AppConfig
             var separator = argument.IndexOf('=', StringComparison.Ordinal);
             if (separator < 0)
             {
-                throw new ConfigurationException($"argument '{argument}' must use --key=value form");
+                // 裸露的开关（如 --simulate-audio）按 "true" 记录，由各消费方自行解释。
+                parsed[argument[2..]] = "true";
+                continue;
             }
 
             var key = argument[2..separator];

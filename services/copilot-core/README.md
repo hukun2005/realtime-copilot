@@ -1,6 +1,6 @@
 # copilot-core
 
-RealTime Copilot 的核心服务。Phase 1 只提供协议、鉴权、心跳、配置、日志与数据库骨架；音频采集、ASR 与问答在后续阶段接入。
+RealTime Copilot 的核心服务。当前（Phase 2-A）提供协议、鉴权、心跳、配置、日志、数据库骨架，以及**音频二进制帧的接收、校验与统计**；真实音频采集、ASR 与问答在后续阶段接入。
 
 ## 端点
 
@@ -51,7 +51,8 @@ src/copilot_core/
 ├── logging_setup.py  # JSON Lines + 脱敏
 ├── errors.py         # CopilotError / ConfigError
 ├── storage/          # SQLite 连接与 user_version 迁移
-└── ws/               # 握手、心跳、事件分发
+├── audio/            # 音频帧解析、序号/时间戳校验、速率限制、统计
+└── ws/               # 握手、心跳、事件与二进制帧分发
 ```
 
 ## 测试
@@ -61,3 +62,5 @@ uv run pytest services/copilot-core/tests -q
 ```
 
 集成测试使用真实 uvicorn 监听回环端口 + 真实 WebSocket 客户端（无 mock 连接）。
+
+音频通道另有 60 秒端到端：pwsh -File scripts/e2e-audio.ps1 -Seconds 60（真实 C# 客户端发送，Core 统计帧数与丢帧）。

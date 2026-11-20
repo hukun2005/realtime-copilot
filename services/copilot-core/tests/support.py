@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 import pytest
+from copilot_core.audio import build_frame, encode_frame
 from websockets.exceptions import ConnectionClosed
 
 PONG_TEMPLATE = {
@@ -69,3 +70,15 @@ async def expect_closed(websocket: Any, seconds: float = 3.0) -> None:
     with pytest.raises(ConnectionClosed):
         while True:
             await asyncio.wait_for(websocket.recv(), timeout=seconds)
+
+
+def audio_frame(sequence: int, capture_ts_ns: int, *, source: str = "loopback") -> bytes:
+    """构造一条符合 v1 布局的二进制帧。"""
+    return encode_frame(build_frame(sequence=sequence, capture_ts_ns=capture_ts_ns, source=source))
+
+
+def corrupt_version(data: bytes) -> bytes:
+    """把帧的协议版本改成 2，用于测试无效帧。"""
+    corrupted = bytearray(data)
+    corrupted[0] = 2
+    return bytes(corrupted)

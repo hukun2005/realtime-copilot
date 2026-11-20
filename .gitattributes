@@ -3,5 +3,6 @@
 *.png binary
 *.ico binary
 *.wav binary
+*.bin binary
 *.dll binary
 *.exe binary

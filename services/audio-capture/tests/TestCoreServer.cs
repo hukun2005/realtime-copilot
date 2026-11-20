@@ -76,6 +76,29 @@ internal sealed class TestCoreServer : IAsyncDisposable
         }
     }
 
+    /// <summary>读取一条二进制消息。</summary>
+    /// <param name="socket">连接。</param>
+    /// <returns>消息字节；对端关闭时为 <c>null</c>。</returns>
+    public static async Task<byte[]?> ReceiveBinaryAsync(WebSocket socket)
+    {
+        var buffer = new byte[16 * 1024];
+        using var accumulator = new MemoryStream();
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer, CancellationToken.None);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                return null;
+            }
+
+            accumulator.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage)
+            {
+                return accumulator.ToArray();
+            }
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
