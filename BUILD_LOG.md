@@ -233,6 +233,57 @@ C# 序列化结果与 `valid-frame.bin` **逐字节相同**（`AudioFrameCodecTe
 
 Phase 2-B：用 `WasapiLoopbackCapture` 替换 `SimulatedAudioSource`，接入重采样与 20ms 分帧，保持 `IAudioFrameSource` 与 `AudioStreamer` 的接口不变；随后在 Win10 22H2 与 Win11 上实测腾讯会议/微信。
 
+## 2026-11-20 · Phase 2-B：WASAPI 设备级采集
+
+分支：`feature/phase-2b-wasapi-capture`（基线 `04b8338`）。
+
+### 实现
+
+- `Capture/WasapiCaptureSource.cs`：`WasapiRecorderBuilder`（NAudio 3.3 起 `WasapiCapture`/`WasapiLoopbackCapture` 已标记过时）→ `BufferedWaveProvider` → `StereoToMonoSampleProvider` → `WdlResamplingSampleProvider(16000)`；`WAVE_FORMAT_EXTENSIBLE` 先 `AsStandardWaveFormat()` 归一化，否则 `ToSampleProvider` 无法识别 float。
+- `Audio/AudioFramer.cs`：跨回调字节累积、20ms 切帧、时间戳按已发帧数推进。
+- `Audio/Pcm16.cs`：float → PCM16LE，限幅到 `short.MinValue..MaxValue`。
+- `Audio/FrameStreamer.cs`：采集事件 → 有界 channel（200 帧，满了丢最旧）→ 顺序发送；采集失败与发送失败分别抛出 `CaptureFailedException` / `CoreConnectionException`。
+- Core：新增 `audio/level.py`（峰值/RMS dBFS），`/healthz` 增加 `peakDbfs`（整段最大）与 `lastPeakDbfs`（最后一帧）。
+- 工具：`tools/tone-player`（诊断用，不随产品发布）；`scripts/capture-smoke.ps1` 串起"播放测试音 → 真实采集 → 断言帧数与电平"。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet build services/audio-capture -c Release` | 0 warning / 0 error |
+| `dotnet test services/audio-capture/tests -c Release` | **74 passed**（新增 19：分帧、PCM16、FrameStreamer、采集参数） |
+| `uv run pytest -q` | **123 passed, 1 skipped**（新增 10：电平、会话峰值） |
+| `pnpm -C packages/protocol test` | 22 passed |
+| `pnpm -C apps/desktop test` | 11 passed |
+| `pwsh -File scripts/e2e-audio.ps1 -Seconds 10 -DropEvery 50` | PASS：491 帧、10 次注入丢帧全部识别 |
+| `pwsh -File scripts/capture-smoke.ps1 -Seconds 8` | **PASS：398 帧、0 丢帧、0 无效帧、整段峰值 -8.7 dBFS**（测试音理论峰值 -8.7 dBFS） |
+| 显式端点：`--capture-device={...}` + 4 秒测试音 | 297 帧、峰值 -10.5 dBFS |
+| `dotnet ... --list-devices` | 1 个渲染端点 + 1 个采集端点 |
+
+### 遇到的问题与修复
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| 采集一次性发出 365 帧，Core 回 `rate_limited` | 泵任务无节拍，把 2 秒缓冲瞬间拉空 | 按"已发帧数 × 20ms"限速；落后 2 秒清空积压 |
+| 真实采集全为静音（跨进程播放） | `MMDeviceEnumerator` 被 `using` 提前 Dispose，返回的 `MMDevice` 失效；此时 `WithDevice(...)` 打开的是无效端点 | 枚举器改为进程级 `Lazy`，不提前释放；默认端点交给 builder 解析 |
+| 用 `WithDevice(显式默认端点)` 采集为静音 | 同上，端点对象生命周期 | 同上；显式端点修复后峰值 -10.5 dBFS |
+| 采集帧数据被补零 | `BufferedWaveProvider.ReadFully` 默认为 true，缓冲不足时补零 | 设 `ReadFully = false`，不足时返回已有样本 |
+| 冒烟脚本报"静音"但实际有声音 | 只比较了**最后一帧**电平，而播放结束后末帧本来就是静音 | Core 增加整段 `peakDbfs`，脚本改用它 |
+| 冒烟脚本无声音 | `SoundPlayer` 在 pwsh 7 不可用（`System.Windows.Extensions`），`powershell.exe` 在远程会话下也未出声 | 改用 `tools/tone-player` 通过 WASAPI 播放 |
+| 全套 Python 测试在机器负载高时偶发失败 | 测试配置把心跳超时压到 1.2s、鉴权 400ms，事件循环被抢占即误判断线 | 测试配置改为鉴权 2s、心跳 500ms/超时 10s（产品默认仍是 30s） |
+| `CA1416` 平台告警 | 静态字段直接构造 `MMDeviceEnumerator` | 字段标注 `[SupportedOSPlatform("windows")]` |
+
+### 未完成 / 风险
+
+- 进程级 loopback（`WithProcessLoopback`）未实现 → Phase 2-C。
+- 30 分钟稳定性、CPU/内存预算、腾讯会议/微信/浏览器实机、设备热插拔、静音事件、supervisor 拉起均未验证。
+- 麦克风采集代码路径已接，未用真实麦克风验证。
+- CI 不跑真实采集（托管 runner 无音频端点）；CI 仍跑模拟音频 60 秒端到端。
+
+### 下一步
+
+Phase 2-C：进程级 loopback（按进程采集）+ 设备热插拔 + 静音诊断；随后 Phase 3 接 ASR。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -240,3 +291,4 @@ Phase 2-B：用 `WasapiLoopbackCapture` 替换 `SimulatedAudioSource`，接入�
 | 2026-11-20 | 初始版本：完成 Phase 0 审查与全部设计文档 |
 | 2026-11-20 | Phase 1：协议、Core、音频骨架、桌面骨架、CI、安全文档 |
 | 2026-11-20 | Phase 2-A：音频二进制协议、Core 接收与统计、C# 发送与模拟流、60 秒端到端 |
+| 2026-11-20 | Phase 2-B：WASAPI 设备级采集、重采样分帧、电平统计、真实采集冒烟 |

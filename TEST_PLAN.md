@@ -132,6 +132,19 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 - `invalid` / `duplicates` / `rateLimited` 均为 0；
 - 连接结束后 `sessions` 回到 0，统计不清零。
 
+### 真实采集（Phase 2-B）
+
+| 层 | 内容 | 位置 |
+|---|---|---|
+| 纯逻辑 | 浮点→PCM16 限幅与字节序、跨回调分帧、时间戳按帧推进 | `tests/Pcm16Tests.cs`、`tests/AudioFramerTests.cs` |
+| 管线 | 采集事件→队列→发送；采集失败与发送失败的传播；停止时释放设备 | `tests/FrameStreamerTests.cs` |
+| 参数 | `--capture-loopback` / `--capture-mic` / 设备 ID 解析 | `tests/CaptureOptionsTests.cs` |
+| 真实设备 | 播放测试音 → loopback 采集 → 帧数与整段峰值（> -45 dBFS） | `scripts/capture-smoke.ps1` |
+
+**硬件与 CI**：真实采集依赖音频端点，GitHub 托管的 Windows runner 没有可用输出设备，因此**不进 CI**；CI 继续跑模拟音频的 60 秒端到端。真实采集的证据是本机 `capture-smoke.ps1` 的输出，记录在 `BUILD_LOG.md`。没有端点时脚本输出 SKIP 并以 0 退出，不伪装成通过。
+
+**已知环境差异**：用 `WithDevice(默认端点)` 打开 loopback 时，本机曾出现其他进程播放被采成静音；改为让 builder 解析默认端点，或在修复枚举器生命周期后显式指定端点，均正常。跨机器行为需在目标机上用同一脚本复测。
+
 ## 6. 安全测试
 
 | 编号 | 断言 | 方式 |

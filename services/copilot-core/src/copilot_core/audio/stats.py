@@ -24,6 +24,9 @@ class AudioCounters:
     timestamp_regressions: int = 0
     dropped: int = 0
     last_frame_ts_ns: int | None = None
+    last_peak_dbfs: float | None = None
+    peak_dbfs: float | None = None
+    last_rms_dbfs: float | None = None
     last_gap_sequence: int | None = None
     error_codes: dict[str, int] = field(default_factory=dict)
 

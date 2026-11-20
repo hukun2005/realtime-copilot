@@ -135,56 +135,59 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 
 ---
 
-## Phase 2-B — Windows 音频采集（WASAPI）
+## Phase 2-B — Windows 音频采集（WASAPI，设备级）
 
-**目标**：把模拟源换成真实采集：稳定捕获系统输出音频；在支持的平台上尝试进程级采集；可选麦克风；设备热插拔与静音可诊断。
+**状态**：已完成设备级 loopback 与可选麦克风；进程级 loopback 顺延到 Phase 2-C（见该节）。
 
-**依赖**：Phase 2-A（协议与接收通道已就绪，直接替换 `SimulatedAudioSource`）。
+**目标**：把模拟源换成真实采集：系统输出 + 可选麦克风，统一到 16k/mono/20ms 帧并发给 Core。
 
-**文件**
+**依赖**：Phase 2-A（协议与接收通道已就绪）。
+
+**交付**
 
 | 路径 | 内容 |
 |---|---|
-| `services/audio-capture/src/Capture/DeviceLoopbackCapture.cs` | `WasapiLoopbackCapture`（默认设备） |
-| `services/audio-capture/src/Capture/ProcessLoopbackCapture.cs` | `ActivateAudioInterfaceAsync` + `AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK` |
-| `services/audio-capture/src/Capture/MicrophoneCapture.cs` | `WasapiCapture`，默认关闭 |
-| `services/audio-capture/src/Dsp/Resampler.cs` | 任意混音格式 → 16k mono PCM16（`WdlResamplingSampleProvider`） |
-| `services/audio-capture/src/Dsp/Framer.cs` | 20ms 分帧 + `MonotonicClock` 时间戳 |
-| `services/audio-capture/src/Diagnostics/SilenceDetector.cs` | -60dBFS 连续 5s 判定 |
-| `services/audio-capture/src/Audio/AudioStreamer.cs` | 由模拟源改为可注入的 `IAudioFrameSource` |
-| `tools/capture-probe.ps1` | 枚举设备与进程、实测可用性 |
+| `services/audio-capture/src/Capture/WasapiCaptureSource.cs` | `WasapiRecorderBuilder` 打开设备（NAudio 3.3 起 `WasapiCapture` 已过时）→ 缓冲 → 重采样 → 分帧 |
+| `services/audio-capture/src/Audio/AudioFramer.cs` | 跨回调残留字节累积、20ms 切帧、按帧数推进时间戳 |
+| `services/audio-capture/src/Audio/Pcm16.cs` | float → PCM16LE，带限幅 |
+| `services/audio-capture/src/Audio/FrameStreamer.cs` | 采集事件 → 有界队列 → 顺序发送；队列满丢最旧帧 |
+| `services/audio-capture/src/Audio/CaptureOptions.cs` | `--capture-loopback`、`--capture-mic`、`--capture-device`、`--mic-device` |
+| `services/copilot-core/src/copilot_core/audio/level.py` | 峰值/RMS dBFS，写入 `/healthz` 的 `peakDbfs` / `lastPeakDbfs` |
+| `scripts/capture-smoke.ps1` | 播放测试音 → 真实采集 → 校验帧数与非静音电平 |
+| `tools/tone-player/` | 诊断工具：通过 WASAPI 播放测试音（不随产品发布） |
 
-**任务**
+**实测结果**（本机，见 `BUILD_LOG.md`）
 
-1. 设备枚举与选择（默认渲染设备 + 指定设备）。
-2. 进程级 loopback：先 `ActivateAudioInterfaceAsync`，失败则**明确报 `process_loopback_unsupported` 并回退设备级**，不得静默降级。
-3. 混音格式 → 16k mono 的重采样与分帧；帧时间戳使用 `Stopwatch`/QPC 单调时钟。
-4. 双路（loopback + mic）各自独立流，带 `source` 标记，不做混音。
-5. 设备热插拔：`IMMNotificationClient` → 重连采集端点。
-6. 静音诊断（U4：会议软件受保护音频路径）。
-7. 崩溃恢复：进程级 watchdog，最多 3 次指数退避重连 Core。
+- 8 秒 loopback 采集：398 帧、0 丢帧、0 无效帧，整段峰值 **-8.7 dBFS**（测试音理论值 -8.7 dBFS）。
+- 显式指定端点采集同样正常（峰值 -10.5 dBFS），修复了"枚举器提前 Dispose 导致端点失效、采到静音"的问题。
+- 采集按 50fps 限速后不再触发 Core 的 `rate_limited`。
 
-**验收标准**
+**未完成 / 未验证**（不在"已完成"范围内）
 
-- [ ] 连续采集 30 分钟，丢帧率 < 0.5%，内存增长 < 20MB。
-- [ ] 4 核机器上 CPU 占用 < 5%（仅采集+重采样+发送）。
-- [ ] 腾讯会议/微信/浏览器三场景均能采到音频（实机记录，含失败场景）。
-- [ ] 进程级采集不可用时，UI 明确显示"整机输出采集"，且日志有原因。
-- [ ] 拔插耳机后 2s 内自动切换并继续出帧。
-- [ ] 静音 5s 触发静音诊断。
-- [ ] 采集进程被强杀后，supervisor 在 3s 内拉起并恢复。
+- [ ] 进程级 loopback（`WasapiRecorderBuilder.WithProcessLoopback`）——Phase 2-C。
+- [ ] 30 分钟稳定性与内存增长。
+- [ ] 4 核 CPU 占用 < 5%。
+- [ ] 腾讯会议 / 微信 / 浏览器三场景实机记录。
+- [ ] 设备热插拔自动切换。
+- [ ] 静音 5s 事件（当前只有电平统计，没有 `capture.silent` 事件）。
+- [ ] 采集进程被强杀后的 supervisor 拉起。
+- [ ] 麦克风实机验证（代码路径已接，未用真实麦克风测试）。
 
-**测试命令** `[计划]`
+**风险**：R5（进程级 loopback 的 Win10 build 门槛）、R6（受保护音频）。设备级采集不依赖进程级 API，已在 Win11 本机验证可用。
+## Phase 2-C — 进程级 loopback（按进程采集）
 
-```bash
-dotnet test services/audio-capture/tests -c Release
-pwsh -File tools/capture-probe.ps1 -ListDevices
-pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 0   # 真实采集替换模拟源后
-```
+**状态**：未开始。
 
-**风险**：R5（Win10 build 20348 门槛）、R6（受保护音频）、U3、U4。若进程级采集在目标机器不可用，产品文案改为"整机输出采集"，并评估虚拟声卡方案（不在 v1 范围）。
+**目标**：只采集指定进程（如腾讯会议）的输出音频，避免把整机声音（通知、音乐）送进转写。
 
----
+**要点**
+
+- `WasapiRecorderBuilder.WithProcessLoopback(processId, ProcessLoopbackMode)`（NAudio 3.3 已提供封装），失败时明确报 `process_loopback_unsupported` 并回退设备级，不静默降级。
+- Windows 版本门槛：进程 loopback 需要 Windows 10 build 20348+；在 19044/19045 上必须给出明确提示。
+- 进程选择 UI 与设备热插拔（`IMMNotificationClient`）一并实现。
+- 验收：腾讯会议/微信/浏览器三场景实机记录；进程退出、设备切换后 2 秒内恢复；CPU 与内存预算同 2-B。
+
+**依赖**：Phase 2-B（设备级采集已稳定）。
 
 ## Phase 3 — 流式 ASR
 
