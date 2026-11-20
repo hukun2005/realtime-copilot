@@ -12,6 +12,34 @@ public sealed record AudioDeviceInfo(string Id, string FriendlyName, string Flow
 /// <remarks>Phase 1 只枚举设备，不打开任何流；采集在 Phase 2 实现。</remarks>
 public static class DeviceCatalog
 {
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static readonly Lazy<MMDeviceEnumerator> Enumerator = new(() => new MMDeviceEnumerator());
+
+    /// <summary>按设备 ID 解析 WASAPI 端点。</summary>
+    /// <param name="deviceId">设备 ID；为空时返回 <c>null</c>（表示系统默认设备）。</param>
+    /// <param name="flow">数据流向。</param>
+    /// <returns>端点对象；找不到时返回 <c>null</c>。</returns>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static NAudio.CoreAudioApi.MMDevice? Resolve(string? deviceId, NAudio.CoreAudioApi.DataFlow flow)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId) || !OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            // 枚举器必须活到设备使用结束：提前 Dispose 会让返回的 MMDevice 失效，
+            // 用它打开采集会得到静音流。
+            return Enumerator.Value.EnumerateAudioEndPoints(flow, DeviceState.Active)
+                .FirstOrDefault(device => string.Equals(device.ID, deviceId, StringComparison.Ordinal));
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>列出当前活动端点。</summary>
     /// <returns>设备列表；非 Windows 平台或枚举失败时返回空列表。</returns>
     public static IReadOnlyList<AudioDeviceInfo> List()

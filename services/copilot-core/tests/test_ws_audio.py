@@ -8,7 +8,7 @@ import logging
 import httpx
 import pytest
 import websockets
-from support import audio_frame, corrupt_version, event, expect_closed, hello_event, recv_until
+from support import audio_frame, corrupt_version, event, expect_closed, hello_event, recv_until, tone_frame
 
 pytestmark = pytest.mark.asyncio
 
@@ -134,6 +134,31 @@ async def test_timestamp_zero_is_invalid(live_server) -> None:  # type: ignore[n
         stats = await wait_audio(live_server, lambda s: s["invalid"] == 1)
         assert stats["errorCodes"] == {"timestamp_invalid": 1}
         assert stats["frames"] == 0
+
+
+async def test_level_statistics_are_reported(live_server) -> None:  # type: ignore[no-untyped-def]
+    async with await connect_audio(live_server) as socket:
+        await socket.send(tone_frame(1, 1_000_000_000, amplitude=16384))
+        stats = await wait_audio(live_server, lambda s: s["lastPeakDbfs"] is not None)
+        assert stats["lastPeakDbfs"] == -6.0
+        assert stats["lastRmsDbfs"] == -6.0
+
+
+async def test_session_peak_survives_later_silence(live_server) -> None:  # type: ignore[no-untyped-def]
+    async with await connect_audio(live_server) as socket:
+        await socket.send(tone_frame(1, 1_000_000_000, amplitude=16384))
+        await socket.send(audio_frame(2, 1_020_000_000))
+
+        stats = await wait_audio(live_server, lambda s: s["frames"] == 2)
+        assert stats["peakDbfs"] == -6.0
+        assert stats["lastPeakDbfs"] == -120.0
+
+
+async def test_silence_reports_floor_level(live_server) -> None:  # type: ignore[no-untyped-def]
+    async with await connect_audio(live_server) as socket:
+        await socket.send(audio_frame(1, 1_000_000_000))
+        stats = await wait_audio(live_server, lambda s: s["lastPeakDbfs"] is not None)
+        assert stats["lastPeakDbfs"] == -120.0
 
 
 async def test_audio_disconnect_releases_session(live_server) -> None:  # type: ignore[no-untyped-def]

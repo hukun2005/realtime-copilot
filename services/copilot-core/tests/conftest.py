@@ -38,9 +38,9 @@ def config() -> AppConfig:
             "server": {
                 "host": "127.0.0.1",
                 "port": 0,
-                "auth_timeout_ms": 400,
-                "heartbeat_interval_ms": 300,
-                "heartbeat_timeout_ms": 1200,
+                "auth_timeout_ms": 2000,
+                "heartbeat_interval_ms": 500,
+                "heartbeat_timeout_ms": 10_000,
             },
         }
     )

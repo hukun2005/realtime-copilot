@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .frame import PAYLOAD_BYTES, FrameError, parse_frame
+from .level import peak_dbfs, rms_dbfs
 from .sink import AudioFrameSink
 from .stats import AudioCounters
 
@@ -147,6 +148,11 @@ class AudioSession:
         self._counters.frames += 1
         self._counters.bytes_received += len(frame.payload)
         self._counters.last_frame_ts_ns = frame.capture_ts_ns
+        level = peak_dbfs(frame.payload)
+        self._counters.last_peak_dbfs = level
+        if self._counters.peak_dbfs is None or level > self._counters.peak_dbfs:
+            self._counters.peak_dbfs = level
+        self._counters.last_rms_dbfs = rms_dbfs(frame.payload)
         self._sink.on_frame(frame)
         return FrameOutcome(True)
 

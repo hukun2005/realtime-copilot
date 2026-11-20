@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import struct
 from typing import Any
 
 import pytest
@@ -82,3 +83,9 @@ def corrupt_version(data: bytes) -> bytes:
     corrupted = bytearray(data)
     corrupted[0] = 2
     return bytes(corrupted)
+
+def tone_frame(sequence: int, capture_ts_ns: int, *, amplitude: int = 16384) -> bytes:
+    """构造一条带固定幅度方波的帧，用于电平断言。"""
+    samples = [amplitude, -amplitude] * 160
+    payload = struct.pack("<320h", *samples)
+    return encode_frame(build_frame(sequence=sequence, capture_ts_ns=capture_ts_ns, payload=payload))
