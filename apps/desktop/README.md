@@ -36,7 +36,13 @@ pnpm -C apps/desktop test      # vitest：状态机与 runtime.json 解析
 pnpm -C apps/desktop exec electron . --smoke
 ```
 
-启动隐藏窗口，等待渲染进程加载完成且 Core 进入 `connected`，向 stdout 打印一行 JSON 后退出（0 成功 / 1 超时）。CI 不运行 Electron，仅本地验证。
+启动隐藏窗口，等待渲染进程加载完成且 Core 进入 `connected`，再从页面读取文本确认 Vue 已挂载（包含"Core 服务"与"已连接"），向 stdout 打印一行 JSON 后退出（0 成功 / 1 超时或未渲染）。CI 不运行 Electron，仅本地验证。
+
+## 页面来源与 CSP
+
+渲染进程通过自定义协议 `copilot://app/` 加载（`protocol.handle` 映射到 `dist/renderer`），而不是 `file://`。原因：`file://` 没有可用的 origin，`script-src 'self'` 会直接拦掉打包后的模块脚本；自定义标准协议让 CSP 真正生效，并且能对越界路径返回 403。
+
+`index.html` 携带内容安全策略：`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; ...`，Electron 的 Insecure-CSP 警告因此消失。
 
 ## 安全
 

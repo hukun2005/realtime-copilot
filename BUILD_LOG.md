@@ -120,7 +120,7 @@ Node 24.22.1 · pnpm 11.28.5 · Python 3.13.15 · .NET SDK 10.0.404（运行时 
 | `pnpm -C apps/desktop build` | renderer 67.34 kB（gzip 26.58 kB），main 由 tsc 输出 |
 | `pnpm -C apps/desktop test` | 11 passed |
 | `pwsh -File scripts/e2e-smoke.ps1 -Seconds 2` | PASS：Core 健康、客户端 `core ready`、`roles={"audio":1}` |
-| Electron smoke（`electron . --smoke`） | exit 0，输出 `{"smoke":"connected","status":{"phase":"connected","serverVersion":"0.1.0","protocol":1,...}}` |
+| Electron smoke（`electron . --smoke`） | exit 0，输出 `{"smoke":"connected","rendered":true,...}`；断言 Vue 已挂载并渲染出"Core 服务 / 已连接" |
 
 补充验证：
 
@@ -160,6 +160,8 @@ Node 24.22.1 · pnpm 11.28.5 · Python 3.13.15 · .NET SDK 10.0.404（运行时 
 | 打包后 `copilot_core` 导入失败 | hatchling `packages` 指向了 `copilot_core` 而非 `src/copilot_core` | 修正打包路径 |
 | Electron 启动报 `Cannot read properties of undefined (reading 'whenReady')` | 本机环境继承了 `ELECTRON_RUN_AS_NODE=1`，Electron 以 Node 模式运行 | 冒烟前清除该变量；`apps/desktop/README.md` 已注明 |
 | `dotnet test` 找不到 `Fact` | xunit 没有全局 using | 增加 `GlobalUsings.cs` |
+| Electron 提示 Insecure-CSP；加 CSP 后页面白屏 | 原本没有 CSP；而 `file://` 下 `script-src 'self'` 匹配不到打包后的模块脚本 | 改为自定义协议 `copilot://app/`（`protocol.handle` + 越界 403），CSP 使用 `'self'`；警告消失且页面正常渲染 |
+| 隐藏窗口读 `innerText` 为空 | `innerText` 依赖布局，隐藏窗口不保证布局 | smoke 断言改用 `textContent` |
 
 ### 尚未解决 / 下一阶段前置
 

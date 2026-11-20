@@ -1,9 +1,22 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'node:path'
+import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
+import { join, normalize, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
 
+/**
+ * 渲染进程使用 `copilot://app/` 而不是 `file://`：
+ * 自定义标准协议有真实 origin，`script-src 'self'` 才有意义，也避开 file:// 的 CSP 歧义。
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'copilot',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+])
+
+const RENDERER_ORIGIN = 'copilot://app/'
 const isSmokeRun = process.argv.includes('--smoke')
 const SMOKE_TIMEOUT_MS = 12_000
 const connection = new CoreConnection()
@@ -55,6 +68,24 @@ async function snapshot(): Promise<DesktopSnapshot> {
   }
 }
 
+function rendererDirectory(): string {
+  return join(__dirname, '..', 'renderer')
+}
+
+/** 把 `copilot://app/<path>` 映射到打包后的渲染产物；越界路径一律 403。 */
+function registerRendererProtocol(): void {
+  const root = normalize(rendererDirectory()) + sep
+  protocol.handle('copilot', (request) => {
+    const url = new URL(request.url)
+    const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+    const target = normalize(join(root, relative === '' ? 'index.html' : relative))
+    if (!target.startsWith(root)) {
+      return new Response('forbidden', { status: 403 })
+    }
+    return net.fetch(pathToFileURL(target).toString())
+  })
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 760,
@@ -69,7 +100,7 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   })
-  void window.loadFile(join(__dirname, '..', 'renderer', 'index.html'))
+  void window.loadURL(RENDERER_ORIGIN + 'index.html')
   return window
 }
 
@@ -84,16 +115,26 @@ function registerIpc(): void {
   })
 }
 
-function maybeFinishSmoke(): void {
-  if (!isSmokeRun || smokeFinished || !rendererLoaded) {
+async function maybeFinishSmoke(): Promise<void> {
+  if (!isSmokeRun || smokeFinished || !rendererLoaded || !mainWindow) {
     return
   }
   const status: CoreStatus = connection.getStatus()
-  if (status.phase === 'connected') {
-    smokeFinished = true
-    console.log(JSON.stringify({ smoke: 'connected', status }))
-    app.exit(0)
+  if (status.phase !== 'connected') {
+    return
   }
+
+  smokeFinished = true
+  let rendered = false
+  try {
+    const text = (await mainWindow.webContents.executeJavaScript('document.body.textContent', true)) as string
+    rendered = text.includes('Core 服务') && text.includes('已连接')
+  } catch {
+    rendered = false
+  }
+
+  console.log(JSON.stringify({ smoke: rendered ? 'connected' : 'ui-missing', rendered, status }))
+  app.exit(rendered ? 0 : 1)
 }
 
 function startSmokeWatchdog(): void {
@@ -111,19 +152,25 @@ function startSmokeWatchdog(): void {
 }
 
 void app.whenReady().then(async () => {
+  registerRendererProtocol()
   runtime = readRuntimeFile()
   connection.setRuntime(runtime)
   registerIpc()
 
   mainWindow = createWindow()
+  if (isSmokeRun) {
+    mainWindow.webContents.on('console-message', (...args: unknown[]) => {
+      console.error('[renderer]', args.slice(1).join(' '))
+    })
+  }
   mainWindow.webContents.on('did-finish-load', () => {
     rendererLoaded = true
-    maybeFinishSmoke()
+    void maybeFinishSmoke()
   })
 
   connection.onChange((status) => {
     mainWindow?.webContents.send('copilot:core-status', status)
-    maybeFinishSmoke()
+    void maybeFinishSmoke()
   })
 
   startSmokeWatchdog()

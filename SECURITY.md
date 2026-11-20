@@ -64,6 +64,7 @@
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
 - preload 只暴露四个方法：`snapshot` / `audio` / `reconnect` / `onCoreStatus`（`src/shared/bridge.ts`），**没有通用 `send` 或 `invoke`**。
 - 主进程只注册 `copilot:snapshot`、`copilot:audio`、`copilot:reconnect` 三个 handler 与一个 `copilot:core-status` 推送通道。
+- 页面通过自定义协议 `copilot://app/` 加载（`protocol.handle`，越界路径返回 403），并携带 CSP：`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'`。使用 `file://` 时 `'self'` 无法匹配打包后的模块脚本，因此没有采用它。
 
 ## 7. 残余风险（明确承认）
 
