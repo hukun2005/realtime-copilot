@@ -4,7 +4,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 
 ## 当前状态
 
-**Phase 1、Phase 2-A（音频协议）、Phase 2-B（WASAPI 采集）、Phase 2-C（采集控制面与安全）已完成并验证。** 当前是可运行、可编译、可测试的跨语言骨架：
+**Phase 1、Phase 2-A（音频协议）、Phase 2-B（WASAPI 采集）、Phase 2-C（采集控制面与安全）及 P2-C.1（控制面并发与清理加固）已完成并验证。** 当前是可运行、可编译、可测试的跨语言工程：
 
 - 统一协议（JSON Schema → TypeScript / Pydantic / 手写 C# DTO）
 - **音频二进制帧协议 v1**：28 字节头 + 640 字节 PCM16LE，跨语言 fixtures 与错误码一致
@@ -34,7 +34,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 ```text
 packages/protocol/       # 协议事实源：事件 JSON Schema、音频帧协议、生成的 TS/Python 模型、跨语言 fixtures
 services/copilot-core/   # Python FastAPI：事件通道、音频帧接收与统计、SQLite、配置、日志
-services/audio-capture/  # C# + NAudio：连接 Core、二进制音频发送、模拟音频源（无 WASAPI）
+services/audio-capture/  # C# + NAudio：WASAPI loopback/麦克风采集、二进制音频发送、控制模式与模拟源
 apps/desktop/            # Electron 主进程 + Vue3 渲染进程（状态展示）
 scripts/e2e-smoke.ps1    # 真实 Core + 真实 C# 客户端的握手冒烟
 scripts/e2e-audio.ps1    # 真实 Core + 真实 C# 客户端 60 秒音频帧传输与丢帧检测
@@ -74,7 +74,7 @@ uv run python -m copilot_core
 pnpm -C apps/desktop build
 pnpm -C apps/desktop start
 
-# 4) 音频进程：连接 Core 并发送 60 秒模拟音频（无 WASAPI）
+# 4) 音频进程：控制模式由 Core 拉起；也可独立运行发送 60 秒模拟音频
 dotnet build services/audio-capture/AudioCapture.csproj -c Release
 # 5a) 模拟音频（无需声卡，CI 使用）
 dotnet services/audio-capture/bin/Release/net10.0/audio-capture.dll --simulate-audio --seconds=60 --drop-every=500
@@ -93,7 +93,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频 + 控制面） | `uv run pytest -q` | 163 passed, 1 skipped |
+| Python（协议 + Core + 音频 + 控制面） | `uv run pytest -q` | 181 passed, 1 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
 | C# | `dotnet test services/audio-capture/tests -c Release` | 78 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 22 passed |
@@ -129,6 +129,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | P2-A 音频二进制协议与 Core 接收通道 | 完成 |
 | P2-B Windows 音频采集（WASAPI） | 完成（设备级 loopback + 可选麦克风） |
 | P2-C 采集控制面、票据、诊断 | 完成 |
+| P2-C.1 控制面并发与清理加固 | 完成 |
 | P2-D 进程级 loopback | 未开始 |
 | P3 流式 ASR | 未开始 |
 | P4 问题检测 | 未开始 |

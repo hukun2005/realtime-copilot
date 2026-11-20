@@ -17,7 +17,8 @@ param(
     [int]$Minutes = 30,
     [int]$SampleSeconds = 5,
     [string]$Configuration = "Release",
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+    [switch]$Simulated
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,7 @@ with wave.open(sys.argv[1], 'wb') as handle:
     $env:RTC_DATA_DIR = $dataDir
     $env:RTC_SERVER_PORT = "0"
     $env:RTC_CAPTURE_SIDECAR = "dotnet services/audio-capture/bin/$Configuration/net10.0/audio-capture.dll"
+    if ($Simulated) { $env:RTC_CAPTURE_SIMULATED = "1" }
     $core = Start-Process -FilePath $python -ArgumentList "-m", "copilot_core" `
         -WorkingDirectory $root -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $dataDir "core.out") `
@@ -88,8 +90,10 @@ with wave.open(sys.argv[1], 'wb') as handle:
 
     Start-Sleep -Seconds 2
     $samples = [System.Collections.Generic.List[object]]::new()
+    $transitions = [System.Collections.Generic.List[object]]::new()
     $startedAt = Get-Date
     $lastFrames = 0
+    $lastCaptureState = $null
 
     while (((Get-Date) - $startedAt).TotalMinutes -lt $Minutes) {
         $health = Invoke-RestMethod -Uri "$httpBase/healthz" -TimeoutSec 5
@@ -122,6 +126,10 @@ with wave.open(sys.argv[1], 'wb') as handle:
             peakDbfs = $health.audio.peakDbfs
             sessions = [int]$health.audio.sessions
         })
+        if ($lastCaptureState -ne $health.capture.state) {
+            $transitions.Add([pscustomobject]@{ at = (Get-Date).ToString("o"); from = $lastCaptureState; to = $health.capture.state })
+            $lastCaptureState = $health.capture.state
+        }
         $lastFrames = $frames
         Start-Sleep -Seconds $SampleSeconds
     }
@@ -133,7 +141,15 @@ with wave.open(sys.argv[1], 'wb') as handle:
 
     $last = $samples | Select-Object -Last 1
     $first = $samples | Select-Object -First 1
+    $windows = Get-CimInstance Win32_OperatingSystem
+    $elapsedMinutes = ((Get-Date) - $startedAt).TotalMinutes
     $report = [pscustomobject]@{
+        result = if ($finalHealth.capture.state -eq "idle" -and $elapsedMinutes -ge $Minutes) { "PASS" } else { "FAIL" }
+        simulated = [bool]$Simulated
+        windows = [ordered]@{ caption = $windows.Caption; version = $windows.Version; build = $windows.BuildNumber }
+        stateTransitions = $transitions
+        sidecarExitCode = $finalHealth.capture.sidecarExitCode
+        elapsedMinutes = [Math]::Round($elapsedMinutes, 2)
         generatedAt = (Get-Date).ToString("o")
         minutes = $Minutes
         sampleSeconds = $SampleSeconds

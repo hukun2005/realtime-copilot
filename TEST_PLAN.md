@@ -157,6 +157,17 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 | 三态判定 | PASS/SKIP/FAIL 与错误码（no_audio_device / playback_failed / capture_failed / no_frames / invalid_frames / silent_capture） | scripts/capture-smoke.ps1 |
 | 稳定性 | 30 分钟采样 CPU/WorkingSet/PrivateBytes/帧率/丢帧/状态，输出 JSON+CSV | scripts/capture-stability.ps1 |
 
+### 控制面加固（P2-C.1）
+
+| 类别 | 断言 |
+|---|---|
+| 并发 | 20 个并发 start 只 spawn 一个进程；20 个并发 stop 只发送一次 `capture.stop` 且只终止一次；start/stop 交错不抛 `InvalidTransition`、同一时刻最多一个存活进程 |
+| 迟到事件 | STARTING + idle → ERROR(`sidecar_idle`) 并清理；STOPPING + capturing 被忽略，随后 idle 回 IDLE；ERROR 不被迟到 capturing/idle 清除；旧连接/wrong requestId 的状态被忽略 |
+| 清理副作用 | 超时/错误/断连/关闭后：进程被终止一次、票据失效（`consume` 返回非 ok）、超时与监听任务结束、`sidecarPid` 为 null |
+| 崩溃与停止竞态 | sidecar 崩溃与用户 stop 同时发生时不抛异常、终止次数 ≤ 1、最终状态为 IDLE 或 ERROR |
+
+这些测试断言真实副作用（spawn 次数、`terminate_calls`、票据有效性、后台 Task、连接引用），不只比较状态字符串。
+
 **CI 限制**：托管 Windows runner 没有音频端点，控制面 E2E 在 CI 用 -Simulated（sidecar 用静音帧源）
 验证真实的跨进程控制与二进制帧链路；真实 WASAPI 采集的 E2E 只能在本机运行，结果记录在 BUILD_LOG.md。
 

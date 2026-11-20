@@ -87,6 +87,11 @@ try {
             frameMs = 20
             frameBytes = 668
             state = $after.capture.state
+            simulated = $false
+            sidecarExitCode = $after.capture.sidecarExitCode
+            sidecarTermination = $after.capture.sidecarTermination
+            startState = ($startOut | ConvertFrom-Json).start.state
+            stopState = ($stopOut | ConvertFrom-Json).stop.state
             startOutput = $startOut
             stopOutput = $stopOut
         }
