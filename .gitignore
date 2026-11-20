@@ -1,0 +1,29 @@
+# 依赖与构建产物
+node_modules/
+dist/
+lib/
+bin/
+obj/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 本地运行产物
+.artifacts/
+*.log
+runtime.json
+
+# 编辑器 / 系统
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 隐私：任何真实会议音频、转写、密钥都不得入库
+secrets.*
+*.wav
+!tests/fixtures/**/*.wav
