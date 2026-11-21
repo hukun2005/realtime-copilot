@@ -204,6 +204,15 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 **未覆盖**：设备热插拔自动恢复、进程级 loopback 的实机验证（NOT_VERIFIED）。
 
+### P2-D.1 补充
+
+| 类别 | 断言 |
+|---|---|
+| 恢复策略 | `RecoveryPolicy` 退避 500ms/1s/2s、3 次上限、越界钳制 |
+| FrameStreamer 生命周期 | 启动前失败、发送失败、Stop 与回调竞争、重复 Stop/Dispose、多线程回调计数一致 |
+| 稳定性可信度 | 脏工作区输出 `result=NOT_REPRODUCIBLE`（不 PASS）；报告含 SHA/哈希/模式/构建配置 |
+| 进程 loopback 探测 | Build ≥20348、API 存在性、PID 有效性；目标应用一律 NOT_VERIFIED |
+
 ## 6. 安全测试
 
 | 编号 | 断言 | 方式 |

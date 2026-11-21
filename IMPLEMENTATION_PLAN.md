@@ -227,8 +227,8 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 
 **未完成**
 
-- 设备热插拔自动恢复（DEVICE_LOST/RECOVERING/ERROR）与最多三次指数退避重试。
-- 进程级 loopback 能力探测与腾讯会议/微信实机验证（NOT_VERIFIED）。
+- 设备热插拔自动恢复已实现策略（默认设备 3 次退避恢复、显式设备不静默切换）；真实拔插与目标应用验证仍为 NOT_VERIFIED。
+- 进程级 loopback 已有 --probe-process-loopback 能力探测；腾讯会议/微信实机验证（NOT_VERIFIED）。
 - 真实 WASAPI 30 分钟与模拟 30 分钟的双跑结果：见 `BUILD_LOG.md`（只记录实际完成的运行）。
 
 ## Phase 3 — 流式 ASR
