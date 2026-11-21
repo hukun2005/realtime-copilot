@@ -4,7 +4,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 
 ## 当前状态
 
-**Phase 1、Phase 2-A（音频协议）、Phase 2-B（WASAPI 采集）、Phase 2-C（采集控制面与安全）及 P2-C.1（控制面并发与清理加固）已完成并验证。** 当前是可运行、可编译、可测试的跨语言工程：
+**Phase 1、Phase 2-A（音频协议）、Phase 2-B（WASAPI 采集）、Phase 2-C（采集控制面与安全）以及 P2-C.1 / P2-C.2（控制面加固）已完成并验证。** 当前是可运行、可编译、可测试的跨语言工程：
 
 - 统一协议（JSON Schema → TypeScript / Pydantic / 手写 C# DTO）
 - **音频二进制帧协议 v1**：28 字节头 + 640 字节 PCM16LE，跨语言 fixtures 与错误码一致
@@ -93,7 +93,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频 + 控制面） | `uv run pytest -q` | 181 passed, 1 skipped |
+| Python（协议 + Core + 音频 + 控制面） | `uv run pytest -q` | 199 passed, 1 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
 | C# | `dotnet test services/audio-capture/tests -c Release` | 78 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 22 passed |
@@ -130,6 +130,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | P2-B Windows 音频采集（WASAPI） | 完成（设备级 loopback + 可选麦克风） |
 | P2-C 采集控制面、票据、诊断 | 完成 |
 | P2-C.1 控制面并发与清理加固 | 完成 |
+| P2-C.2 最终加固（锁外 spawn、任务绑定、票据边界） | 完成 |
 | P2-D 进程级 loopback | 未开始 |
 | P3 流式 ASR | 未开始 |
 | P4 问题检测 | 未开始 |

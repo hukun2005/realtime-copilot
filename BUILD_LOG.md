@@ -403,6 +403,51 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 - 进程级 loopback、按来源统计、静音事件仍未实现（Phase 2-D / 后续）。
 - 票据仍不证明进程身份。
 
+## 2026-11-21 · P2-C.2：控制面最终加固
+
+分支：`feature/phase-2c2-final-hardening`（基线 `8f96a3a`）。
+
+### 修复内容
+
+- **锁外创建 sidecar**：`start` 改为三阶段——持锁登记会话/代次/票据并进入 STARTING →
+  锁外 `create_subprocess_exec` → 重新持锁确认会话仍有效；会话已关闭则锁外立即终止新进程。
+  持锁期间不再等待进程创建。
+- **任务绑定会话**：`timeout_task` / `watch_task` / `control_task` 移入 `_Session`；
+  清理只取消本会话任务，且跳过当前正在执行的任务；停止时只取消启动超时，保留进程监看。
+- **disconnect 竞态**：同一把锁内读取会话/连接/状态快照，锁外执行终止与广播；
+  `_conclude_stop` / `_fail_and_cleanup` 再次校验会话身份与状态，幂等。
+- **票据边界**：到期判定改为 `now >= expiry`（到期瞬间失效）；新增 512 字符上限；
+  Base64 使用 `validate=True`（非法字符/长度直接拒绝）；畸形 JSON、旧会话、已结束会话、
+  重放均返回统一 `TicketRejection`，不暴露签名或 secret。
+- **文档**：SECURITY.md 清理"控制面占位/票据未实现/按进程采集在 Phase 2-C"等过期说法，
+  统一为"票据已实现但不证明进程身份"。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -q` | **199 passed, 1 skipped**（新增 18：spawn 窗口 3、会话任务 3、disconnect 竞态 2、票据边界 10） |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 4` | PASS：200 帧，peak -10.5 dBFS，idle，无残留 |
+| `pwsh -File scripts/e2e-control.ps1 -Seconds 4 -Simulated` | PASS：201 帧（静音源） |
+| `dotnet test services/audio-capture/tests -c Release` | 78 passed（本轮未改 C#） |
+| `pnpm -C packages/protocol test` / `pnpm -C apps/desktop test` | 22 / 11 passed |
+| `pnpm -r --if-present run typecheck` | 通过 |
+
+### 新增测试（18）
+
+- `test_capture_session_lifecycle.py`：stop/shutdown 在 spawn 期间发生、spawn 失败清理、
+  旧会话任务不影响新会话、shutdown 取消全部任务、disconnect 与 stop、disconnect 与进程退出、
+  双重 stop 不重复终止。
+- `test_tickets.py`（新增 10）：到期瞬间、到期前 1 秒、超长输入、畸形 Base64、畸形 JSON、
+  已结束会话、新会话不能消费旧票据、重放、错误信息不泄露签名/secret。
+
+### 未完成 / 风险
+
+- 本轮未重跑 30 分钟稳定性（控制面改动不触及采集环路；上一次 30 分钟数据对应 P2-C 代码）。
+- 票据仍不证明 Windows 进程身份；进程级 loopback、按来源统计、静音事件仍未实现。
+- C# sidecar 未改动。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -413,3 +458,4 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 | 2026-11-20 | Phase 2-B：WASAPI 设备级采集、重采样分帧、电平统计、真实采集冒烟 |
 | 2026-11-20 | Phase 2-C：采集控制面、短期票据、三态冒烟、诊断与 30 分钟稳定性 |
 | 2026-11-20 | P2-C.1：控制面并发锁、会话代次、统一清理与迟到状态处理 |
+| 2026-11-21 | P2-C.2：锁外 spawn、会话任务绑定、disconnect 竞态与票据边界加固 |

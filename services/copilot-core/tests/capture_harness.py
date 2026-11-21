@@ -111,12 +111,14 @@ class Harness:
         return self.envs[index].get("RTC_AUDIO_TICKET") if len(self.envs) > index else None
 
     def pending_tasks(self) -> list[asyncio.Task[Any]]:
+        session = self.controller._session
+        if session is None:
+            return []
         return [
             task
-            for task in (self.controller._timeout_task, self.controller._watch_task)
+            for task in (session.timeout_task, session.watch_task, session.control_task)
             if task is not None and not task.done()
         ]
-
 
 async def wait_until(predicate, *, seconds: float = 2.0) -> None:  # type: ignore[no-untyped-def]
     deadline = asyncio.get_running_loop().time() + seconds

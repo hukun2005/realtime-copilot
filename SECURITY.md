@@ -32,7 +32,7 @@
 
 鉴权失败的行为：回一条 `system.error{code:"auth_failed"}` 后关闭连接；2 秒内未发送 `hello` 回 `auth_timeout` 并关闭（`server.auth_timeout_ms`）。
 
-**所有角色共用同一令牌**：`ui` / `bridge` / `audio` 只在 `hello.payload.role` 上区分，服务端按角色限制可用消息类型（§7），但不校验进程身份。短期音频凭证的设计与未实现原因见 §7。
+**所有角色共用同一令牌**：`ui` / `bridge` / `audio` 只在 `hello.payload.role` 上区分，服务端按角色限制可用消息类型（§7），但不校验进程身份。音频角色另有短期一次性票据（§7），但票据同样**不证明进程身份**。
 
 ## 4. 文件保护：Windows ACL 与 DPAPI 的真实取舍
 
@@ -104,15 +104,19 @@ Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立�
 
 - 只有 **Core 拉起的 sidecar** 会被要求出示票据：`/healthz` 的 `capture.sidecarPid` 非空期间，
   `role=audio` 的 hello 必须携带有效票据，否则 `ticket_invalid` + 1008。
-- 票据有效期默认 60 秒（`capture.ticket_ttl_seconds`），一次性消费，重放返回 `replayed`。
+- 票据有效期默认 60 秒（`capture.ticket_ttl_seconds`），**到期瞬间即失效**（`now >= expiry`）；
+  一次性消费，重放返回 `replayed`；超过 512 字符、非法 Base64、非法 JSON 一律按 `malformed` 拒绝。
 - `capture.stop`、sidecar 崩溃、Core 关闭都会结束会话，旧票据随之失效（session 不同即拒绝）。
 - 手工启动的 sidecar（`runtime.json` + 令牌）不受影响：没有活跃会话时不要求票据，
   Phase 2-B 的 CLI 用法与测试脚本保持不变。
 
-**并发与生命周期保证（P2-C.1）**：每次 `capture.start` 递增会话代次（generation）；
-状态回报必须匹配当前连接与代次，迟到/跨会话消息一律忽略；`error` 不会被后续迟到消息清除。
-所有失败路径（启动/停止超时、sidecar 错误、异常退出、连接断开、Core 关闭）都走同一收尾流程：
-取消超时任务 → 撤销票据 → 终止进程并等待退出 → 清空连接 → 广播最终状态。
+**并发与生命周期保证（P2-C.1 / P2-C.2）**：每次 `capture.start` 递增会话代次（generation），
+子进程的创建在**全局锁之外**完成（持锁登记意图 → 锁外 spawn → 重新持锁确认会话仍有效，
+无效则立即终止刚创建的进程）。状态回报必须匹配当前连接与代次，迟到/跨会话消息一律忽略；
+`error` 不会被后续迟到消息清除。每个会话持有自己的超时/监听/控制任务，清理只取消本会话任务，
+且不会取消当前正在执行的任务。所有失败路径（spawn 失败、启动/停止超时、sidecar 错误、
+异常退出、连接断开、Core 关闭）都走同一收尾流程：取消本会话任务 → 撤销票据 → 终止进程并
+等待退出 → 清空连接 → 广播最终状态。
 
 **残余风险**：票据只证明"这张票是本次 Core 会话签发的"，不证明进程身份。能读取 `runtime.json`
 的同用户进程仍可在会话窗口内抢先连接受理；缓解是窗口短（≤60s）、一次性、且 Core 会记录
@@ -121,7 +125,7 @@ Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立�
 ### 真实采集的隐私边界（Phase 2-B）
 
 - `--capture-loopback` / `--capture-mic` 是**显式启动参数**，没有自动启动、没有后台常驻采集；不传参数时进程只连接 Core、不发音频。
-- loopback 采集的是**整个输出设备**，包含会议之外的声音（通知、音乐、其他应用）。产品文案必须说明"整机输出采集"；按进程采集在 Phase 2-C。
+- loopback 采集的是**整个输出设备**，包含会议之外的声音（通知、音乐、其他应用）。产品文案必须说明"整机输出采集"；按进程采集尚未实现（Phase 2-D）。
 - 麦克风默认关闭，必须显式 `--capture-mic`。
 - 采集侧只做 float→PCM16 与分帧，不写文件；Core 只在内存中统计电平（`peakDbfs` / `lastPeakDbfs`），不保留 PCM。
 - 电平统计是裸数字，不含频谱或可还原音频的信息。
@@ -130,12 +134,12 @@ Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立�
 
 | 风险 | 说明 | 缓解 |
 |---|---|---|
-| 同用户进程可读 `runtime.json` | Windows 上同用户的其他程序可以读取该文件并连接 Core | 本阶段接受；令牌每次启动轮换 + ACL + 只绑定回环。控制面（`capture.*`）目前仍是占位实现，尚未产生真实权限 |
-| **角色自报，不等于进程身份** | 任何拿到令牌的同用户进程都能声明 `role=audio` 并发送音频帧 | 已实施：只有 `audio` 角色可发二进制帧、速率上限、单帧上限、统计可观测；待实施：§7 的短期 ticket（Phase 2-B） |
+| 同用户进程可读 `runtime.json` | Windows 上同用户的其他程序可以读取该文件并连接 Core，进而调用 `capture.start`、声明 `role=audio` 或消费音频帧 | 令牌每次启动轮换 + ACL + 只绑定回环；控制面有状态机与超时；票据把音频连接限制为 Core 拉起的一次性会话。**无法阻止同用户进程冒充**，这是本阶段明确接受的风险 |
+| **角色自报，不等于进程身份** | 任何拿到令牌的同用户进程都能声明 `role=audio` 并发送音频帧 | 已实施：只有 `audio` 角色可发二进制帧、速率与单帧上限、短期一次性票据。**仍待实施**：父进程/PID 校验、命名管道句柄继承等真正的进程身份验证 |
 | 令牌明文落盘 | 见 §4 的取舍 | 每次启动轮换 + ACL + 回环 |
 | 无 TLS | 回环流量不加密 | 数据不出本机；不引入自签证书以免增加运维复杂度 |
 | 音频内容可被同机进程读取 | Core 在内存中短暂持有 PCM 帧 | 默认不落盘、不进日志；同用户内存读取属于操作系统级信任边界，本阶段不声称防护 |
-| 整机 loopback 会采到非会议声音 | 设备级采集覆盖全部输出 | 由用户显式启动并在 UI 标注；按进程采集在 Phase 2-C |
+| 整机 loopback 会采到非会议声音 | 设备级采集覆盖全部输出 | 由用户显式启动并在 UI 标注；按进程采集尚未实现（Phase 2-D） |
 
 ## 9. 明确不做
 
@@ -146,7 +150,7 @@ Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立�
 - WebSocket：连接结束后 `finally` 中关闭；服务端对已消失对端做 best-effort 关闭。
 - 音频会话：连接结束、异常或角色拒绝时归还 `AudioHub` 的会话计数，统计保留（`test_audio_disconnect_releases_session` 断言）。
 - SQLite：应用 lifespan 结束时 `close()`；WAL 在重启后仍可读。
-- 子进程：`scripts/e2e-smoke.ps1` / `scripts/e2e-audio.ps1` 在 `finally` 中终止 Core 与客户端；桌面端 `window-all-closed` 时断开连接并退出。
+- 子进程：Core 拉起的音频 sidecar 由 `CaptureController` 统一管理——正常停止、超时、错误、连接断开与 Core 关闭都会终止并等待进程退出；`scripts/e2e-smoke.ps1` / `e2e-audio.ps1` / `e2e-control.ps1` 在 `finally` 中清理 Core 与客户端；桌面端 `window-all-closed` 时断开连接并退出。
 
 ## 11. 报告问题
 

@@ -8,11 +8,12 @@
 并发与清理约定：
 
 - 所有状态检查、迁移与会话登记都在同一把 :class:`asyncio.Lock` 下完成；
-  **不在持锁期间等待进程退出或等待 sidecar 状态回报**。
-- 每次 start 生成一个新的 ``_Session``（含 generation），状态回报必须匹配
-  当前会话与连接实例，迟到消息一律忽略。
-- 失败收尾只有一条路径 :meth:`CaptureController._fail_and_cleanup`：取消超时任务、
-  撤销票据、终止进程、清空连接、广播错误，且对同一会话幂等。
+  **创建子进程在锁外执行**（三阶段：持锁登记意图 → 锁外 spawn → 重新持锁确认），
+  避免持锁等待进程创建，也避免并发 start 重复 spawn。
+- 每次 start 生成新的 ``_Session``（含 generation）与独立的后台任务；
+  状态回报必须匹配当前会话与连接实例，迟到消息一律忽略。
+- 失败收尾只有一条路径 :meth:`CaptureController._fail_and_cleanup`：取消本会话任务、
+  撤销票据、终止进程、清空连接、广播最终状态，且对同一会话幂等。
 - Core 启动永远是 idle；没有 capture.start 不会拉起任何采集进程。
 """
 
@@ -45,7 +46,7 @@ class CaptureUnavailable(Exception):
 
 @dataclass
 class _Session:
-    """一次采集会话的全部可变状态。"""
+    """一次采集会话的全部可变状态；后台任务也绑定在这里。"""
 
     generation: int
     request_id: str | None
@@ -58,6 +59,10 @@ class _Session:
     stopped: asyncio.Event = field(default_factory=asyncio.Event)
     closed: bool = False
     terminating: bool = False
+    spawning: bool = False
+    timeout_task: asyncio.Task[None] | None = None
+    watch_task: asyncio.Task[None] | None = None
+    control_task: asyncio.Task[None] | None = None
 
 
 class CaptureController:
@@ -81,9 +86,6 @@ class CaptureController:
         self._generation = 0
         self._last_exit_code: int | None = None
         self._last_termination: str | None = None
-        self._timeout_task: asyncio.Task[None] | None = None
-        self._watch_task: asyncio.Task[None] | None = None
-        self._control_task: asyncio.Task[None] | None = None
         self._shutting_down = False
 
     # ------------------------------------------------------------------ 查询
@@ -123,9 +125,11 @@ class CaptureController:
         """处理 ``capture.start``。
 
         幂等：已经在 starting/capturing 时只广播当前状态，不创建第二个进程。
+        三阶段：持锁登记意图 → 锁外创建进程 → 重新持锁确认会话仍然有效。
         """
         emit: list[Any] = []
         session: _Session | None = None
+        env: dict[str, str] = {}
 
         async with self._lock:
             if self._shutting_down:
@@ -137,16 +141,42 @@ class CaptureController:
             elif not self._config.sidecar_command:
                 emit.append(self._error(event, "sidecar_unavailable", "no sidecar command is configured"))
             else:
-                session = await self._begin_start_locked(event, emit)
+                session, env = self._prepare_start_locked(event)
+                emit.append(self._status_event())
 
         await self._emit(emit)
-
         if session is None:
             return
 
-        self._timeout_task = asyncio.create_task(self._start_timeout(session.generation))
-        self._watch_task = asyncio.create_task(self._watch_process(session))
-        await self._emit([self._status_event()])
+        process = await self._spawn(session, env)
+        if process is None:
+            return
+
+        accepted = False
+        status: Any | None = None
+        async with self._lock:
+            session.spawning = False
+            if (
+                self._session is session
+                and not session.closed
+                and self._machine.state is CaptureState.STARTING
+            ):
+                session.process = process
+                accepted = True
+                status = self._status_event()
+
+        if not accepted:
+            # 会话在 spawn 期间被 stop/失败收尾：锁外立即终止刚创建的进程。
+            self._logger.info("sidecar spawned into a closed session; terminating pid=%s", process.pid)
+            await self._terminate_raw(process)
+            return
+
+        session.timeout_task = asyncio.create_task(self._start_timeout(session))
+        session.watch_task = asyncio.create_task(self._watch_process(session))
+        self._logger.info(
+            "capture starting: pid=%s generation=%s", process.pid, session.generation
+        )
+        await self._emit([status])
 
     async def stop(self, event: Any) -> None:
         """处理 ``capture.stop``；重复调用幂等，且区分正常停止与失败。"""
@@ -165,9 +195,12 @@ class CaptureController:
                 self._machine.transition(CaptureState.STOPPING)
                 session = self._session
                 emit.append(self._status_event())
-                if session is not None and session.connection is None:
+                if session is None:
                     need_terminate_immediately = True
-                self._cancel_timeout_locked()
+                else:
+                    self._cancel_task(session, "timeout_task")
+                    if session.connection is None:
+                        need_terminate_immediately = True
 
         if session is None:
             await self._emit(emit)
@@ -176,7 +209,7 @@ class CaptureController:
         if need_terminate_immediately:
             await self._emit(emit)
             await self._terminate(session)
-            await self._conclude_stop(session, expected_generation=session.generation)
+            await self._conclude_stop(session)
             return
 
         await self._emit(emit)
@@ -196,7 +229,7 @@ class CaptureController:
             )
             return
 
-        await self._conclude_stop(session, expected_generation=session.generation)
+        await self._conclude_stop(session)
 
     async def shutdown(self) -> None:
         """Core 关闭：停止 sidecar 并等待退出，尽量不留残留进程。"""
@@ -205,21 +238,20 @@ class CaptureController:
             self._shutting_down = True
             session = self._session
             self._session = None
-            self._cancel_timeout_locked()
-            self._cancel_watch_locked()
             if session is not None:
+                self._cancel_tasks_locked(session)
                 session.closed = True
             self._tickets.end_session()
             self._machine = CaptureStateMachine()
 
         if session is not None:
-            emit.append(self._status_event())
             if session.connection is not None:
                 try:
                     await session.connection.send_control("capture.stop", {}, session.request_id)
                 except Exception:
                     self._logger.debug("shutdown: capture.stop was not delivered")
             await self._terminate(session, grace=SHUTDOWN_GRACE_SECONDS)
+            emit.append(self._status_event())
 
         await self._emit(emit)
 
@@ -240,7 +272,7 @@ class CaptureController:
                 session = current
 
         if session is not None:
-            self._control_task = asyncio.create_task(self._send_start(session))
+            session.control_task = asyncio.create_task(self._send_start(session))
 
     async def _send_start(self, session: _Session) -> None:
         connection = session.connection
@@ -253,18 +285,31 @@ class CaptureController:
             await self._fail_and_cleanup(session, "audio_disconnected", "could not send capture.start")
 
     async def handle_disconnect(self, connection: Any) -> None:
-        """音频连接断开：异常断开进 error，停止过程中的断开按正常结束处理。"""
+        """音频连接断开。
+
+        在同一把锁内取一致的会话/状态快照，锁外执行终止与广播；
+        正常停止过程中的断开按正常结束处理，不能被误报为异常。
+        """
         session: _Session | None = None
+        action: str | None = None
+
         async with self._lock:
             current = self._session
             if current is None or current.connection is not connection:
                 return
             current.connection = None
-            session = current
+            state = self._machine.state
+            if state is CaptureState.STOPPING:
+                session, action = current, "conclude"
+            elif state in (CaptureState.STARTING, CaptureState.CAPTURING):
+                session, action = current, "fail"
 
-        if self._machine.state is CaptureState.STOPPING:
-            await self._conclude_stop(session, expected_generation=session.generation)
-        elif self._machine.state in (CaptureState.STARTING, CaptureState.CAPTURING):
+        if session is None:
+            return
+
+        if action == "conclude":
+            await self._conclude_stop(session)
+        else:
             await self._fail_and_cleanup(
                 session,
                 "audio_disconnected",
@@ -303,11 +348,13 @@ class CaptureController:
                 if state is CaptureState.STARTING:
                     self._machine.transition(CaptureState.CAPTURING)
                     current.started.set()
+                    self._cancel_task(current, "timeout_task")
                     action = "started"
             elif reported == "idle":
                 if state is CaptureState.STOPPING:
                     current.stopped.set()
                     action = "stopped"
+                    session = current
                 elif state is CaptureState.STARTING:
                     action = "failed_idle"
                     session = current
@@ -320,21 +367,21 @@ class CaptureController:
             else:
                 return
 
-            if action == "stopped":
-                session = current
+        if session is None and action == "started":
+            await self._emit([self._status_event()])
+            return
 
         if action == "stopped" and session is not None:
-            await self._conclude_stop(session, expected_generation=session.generation)
+            await self._conclude_stop(session)
         elif action == "failed_idle" and session is not None:
             await self._fail_and_cleanup(session, "sidecar_idle", "the sidecar returned to idle before capturing")
         elif action == "failed_status" and session is not None:
             await self._fail_and_cleanup(session, error_code, error_message)
-        elif action == "started":
-            await self._emit([self._status_event()])
 
     # ------------------------------------------------------------------ 内部
 
-    async def _begin_start_locked(self, event: CaptureStartEvent, emit: list[Any]) -> _Session | None:
+    def _prepare_start_locked(self, event: CaptureStartEvent) -> tuple[_Session, dict[str, str]]:
+        """阶段 A：在锁内登记启动意图并签发票据，不创建进程。"""
         if self._machine.state is CaptureState.ERROR:
             self._machine.transition(CaptureState.IDLE)
 
@@ -350,47 +397,40 @@ class CaptureController:
             options=options,
             device_id=loopback.device_id if loopback is not None else None,
             mode="loopback",
+            spawning=True,
         )
         self._session = session
+        self._tickets.begin_session()
+        ticket = self._tickets.issue()
+        env = {**os.environ, ENV_CONTROL: "1", ENV_TICKET: ticket}
+        return session, env
 
+    async def _spawn(self, session: _Session, env: dict[str, str]) -> asyncio.subprocess.Process | None:
+        """阶段 B：锁外创建子进程；失败时走统一失败收尾。"""
         try:
-            self._tickets.begin_session()
-            ticket = self._tickets.issue()
-            env = {**os.environ, ENV_CONTROL: "1", ENV_TICKET: ticket}
-            session.process = await asyncio.create_subprocess_exec(
+            return await asyncio.create_subprocess_exec(
                 *self._config.sidecar_command,
                 env=env,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
         except (OSError, RuntimeError) as exc:
-            self._tickets.end_session()
-            self._machine.fail("sidecar_unavailable", f"could not start audio sidecar: {exc}")
-            self._session = None
-            session.closed = True
-            emit.append(self._error(event, "sidecar_unavailable", "could not start the audio sidecar"))
+            self._logger.warning("could not start audio sidecar: %s", exc)
+            await self._fail_and_cleanup(session, "sidecar_unavailable", f"could not start audio sidecar: {exc}")
             return None
 
-        self._logger.info(
-            "capture starting: pid=%s generation=%s", session.process.pid, session.generation
-        )
-        return session
-
-    async def _start_timeout(self, generation: int) -> None:
+    async def _start_timeout(self, session: _Session) -> None:
         try:
             await asyncio.sleep(self._config.start_timeout_ms / 1000)
         except asyncio.CancelledError:
             return
-
-        async with self._lock:
-            session = self._session
-            if (
-                session is None
-                or session.generation != generation
-                or self._machine.state is not CaptureState.STARTING
-            ):
-                return
-        await self._fail_and_cleanup(session, "capture_timeout", "the sidecar did not start capturing in time")
+        if session.closed:
+            return
+        await self._fail_and_cleanup(
+            session,
+            "capture_timeout",
+            "the sidecar did not start capturing in time",
+        )
 
     async def _watch_process(self, session: _Session) -> None:
         process = session.process
@@ -400,8 +440,12 @@ class CaptureController:
             code = await process.wait()
         except asyncio.CancelledError:
             return
+
         self._last_exit_code = code
         self._last_termination = "self"
+
+        if session.closed:
+            return
 
         async with self._lock:
             if self._session is not session or session.closed:
@@ -413,15 +457,14 @@ class CaptureController:
                 session, "sidecar_exited", f"the audio sidecar exited with code {code}"
             )
         elif state is CaptureState.STOPPING:
-            await self._conclude_stop(session, expected_generation=session.generation)
+            await self._conclude_stop(session)
 
-    async def _conclude_stop(self, session: _Session, *, expected_generation: int) -> None:
+    async def _conclude_stop(self, session: _Session) -> None:
         """正常停止收尾：STOPPING -> IDLE，撤销票据并清理进程。"""
         emit: list[Any] = []
         async with self._lock:
             if (
                 self._session is not session
-                or session.generation != expected_generation
                 or session.closed
                 or self._machine.state is not CaptureState.STOPPING
             ):
@@ -431,8 +474,7 @@ class CaptureController:
             self._machine.transition(CaptureState.IDLE)
             self._tickets.end_session()
             self._session = None
-            self._cancel_timeout_locked()
-            self._cancel_watch_locked()
+            self._cancel_tasks_locked(session)
             emit.append(self._status_event())
 
         await self._terminate(session)
@@ -448,8 +490,7 @@ class CaptureController:
             session.stopped.set()
             self._session = None
             self._tickets.end_session()
-            self._cancel_timeout_locked()
-            self._cancel_watch_locked()
+            self._cancel_tasks_locked(session)
             self._machine.fail(code, message)
             emit.append(self._status_event())
 
@@ -458,46 +499,63 @@ class CaptureController:
         await self._emit(emit)
 
     async def _terminate(self, session: _Session, *, grace: float = 2.0) -> None:
-        """终止 sidecar 进程；对同一会话只执行一次实质终止。"""
+        """终止本会话的 sidecar 进程；对同一会话只执行一次实质终止。"""
         process = session.process
         if process is None or session.terminating:
             return
         session.terminating = True
         session.process = None
-
-        if process.returncode is None:
-            try:
-                process.terminate()
-            except ProcessLookupError:
-                return
-            try:
-                await asyncio.wait_for(process.wait(), timeout=grace)
-            except TimeoutError:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    return
-                await process.wait()
+        await self._stop_process(process, grace=grace)
         self._last_exit_code = process.returncode
         self._last_termination = "core"
+
+    async def _terminate_raw(self, process: asyncio.subprocess.Process, *, grace: float = 2.0) -> None:
+        """终止一个尚未登记到会话的进程（spawn 完成时会话已失效）。"""
+        await self._stop_process(process, grace=grace)
+        self._last_exit_code = process.returncode
+        self._last_termination = "core"
+
+    @staticmethod
+    async def _stop_process(process: asyncio.subprocess.Process, *, grace: float) -> None:
+        if process.returncode is not None:
+            return
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(process.wait(), timeout=grace)
+        except TimeoutError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                return
+            await process.wait()
 
     def _reset_to_idle_locked(self) -> None:
         self._machine.transition(CaptureState.IDLE)
         self._tickets.end_session()
+        session = self._session
         self._session = None
-        self._cancel_timeout_locked()
-        self._cancel_watch_locked()
+        if session is not None:
+            self._cancel_tasks_locked(session)
 
-    def _cancel_timeout_locked(self) -> None:
-        if self._timeout_task is not None and not self._timeout_task.done():
-            self._timeout_task.cancel()
-        self._timeout_task = None
-
-    def _cancel_watch_locked(self) -> None:
-        task = self._watch_task
-        self._watch_task = None
+    @staticmethod
+    def _cancel_task(session: _Session, name: str) -> None:
+        task = getattr(session, name)
+        setattr(session, name, None)
         if task is not None and not task.done() and task is not asyncio.current_task():
             task.cancel()
+
+    @staticmethod
+    def _cancel_tasks_locked(session: _Session) -> None:
+        """只取消本会话的任务，且不取消当前正在执行的任务。"""
+        current = asyncio.current_task()
+        for name in ("timeout_task", "watch_task", "control_task"):
+            task = getattr(session, name)
+            setattr(session, name, None)
+            if task is not None and not task.done() and task is not current:
+                task.cancel()
 
     async def _emit(self, events: list[Any]) -> None:
         for event in events:
