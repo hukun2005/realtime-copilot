@@ -60,11 +60,13 @@ class DeepgramProvider(AsrProvider):
             "encoding": "linear16",
             "sample_rate": str(self._config.sample_rate),
             "channels": str(self._config.channels),
-            "interim_results": "true",
+            "interim_results": "true" if self._config.interim_results else "false",
             "language": self._config.language,
-            "punctuate": "true",
-            "smart_format": "true",
+            "punctuate": "true" if self._config.punctuate else "false",
+            "smart_format": "true" if self._config.smart_format else "false",
         }
+        if self._config.endpointing_ms is not None:
+            options["endpointing"] = str(self._config.endpointing_ms)
         if self._config.model:
             options["model"] = self._config.model
         options.update(self._config.options)

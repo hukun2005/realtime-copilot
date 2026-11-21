@@ -58,6 +58,10 @@ class AsrProviderConfig:
     options: dict[str, str] = field(default_factory=dict)
     receive_timeout_seconds: float = 15.0
     connect_timeout_seconds: float = 10.0
+    interim_results: bool = True
+    endpointing_ms: int | None = None
+    punctuate: bool = True
+    smart_format: bool = True
 
 
 class AsrProvider(Protocol):
