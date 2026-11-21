@@ -193,6 +193,17 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 说明：本轮不包含真实 ASR provider、转写装配与延迟评测。
 
+## 5B. 音频可靠性（P2-D）
+
+| 类别 | 断言 |
+|---|---|
+| 按来源统计 | loopback 与 mic 的帧数/丢帧/重复/峰值/RMS/静音时长/时间戳/采样率/声道完全独立；`/healthz.audio.sources` 与 `audio.status.sources` 同源 |
+| 静音时长 | 静音帧累加 `silenceDurationMs`，出现语音后归零 |
+| C# Channel | 容量 200 有界；消费者阻塞时满载丢帧且计数；停止后重复 Emit 不崩溃；取消后源恰好 Stop 一次 |
+| 稳定性报告 | 报告绑定 Git SHA、sidecar 版本、模式、起止时间、理论/实际帧数、状态迁移、sidecar 退出码；未完成 30 分钟或 start/stop 失败时退出码非零；真实模式无设备时标记 SKIP |
+
+**未覆盖**：设备热插拔自动恢复、进程级 loopback 的实机验证（NOT_VERIFIED）。
+
 ## 6. 安全测试
 
 | 编号 | 断言 | 方式 |

@@ -9,7 +9,8 @@ namespace RealtimeCopilot.AudioCapture.Audio;
 /// </summary>
 /// <remarks>
 /// 采集回调在设备线程上，发送是异步 I/O，因此中间用有界 channel 解耦：
-/// 队列满时丢弃最旧的帧（实时音频宁可丢帧也不阻塞设备回调）。
+/// 队列满时丢弃**新到**的帧并计数（实时音频宁可丢帧也不阻塞设备回调）。
+/// 使用 Wait 模式让 `TryWrite` 在满载时返回 false：不阻塞回调，同时让丢弃可观测。
 /// </remarks>
 public sealed class FrameStreamer
 {
@@ -54,7 +55,7 @@ public sealed class FrameStreamer
     {
         var channel = Channel.CreateBounded<AudioFrame>(new BoundedChannelOptions(200)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = false,
         });

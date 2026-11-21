@@ -93,9 +93,9 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频 + 控制面 + ASR 准备） | `uv run pytest -q` | 229 passed, 1 skipped |
+| Python（协议 + Core + 音频 + 控制面 + ASR 准备） | `uv run pytest -q` | 234 passed, 1 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
-| C# | `dotnet test services/audio-capture/tests -c Release` | 78 passed |
+| C# | `dotnet test services/audio-capture/tests -c Release` | 81 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 22 passed |
 | 桌面（Vue/主进程逻辑） | `pnpm -C apps/desktop test` | 11 passed |
 | 类型检查 | `pnpm -r --if-present run typecheck` | 通过（含 vue-tsc） |
@@ -131,7 +131,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | P2-C 采集控制面、票据、诊断 | 完成 |
 | P2-C.1 控制面并发与清理加固 | 完成 |
 | P2-C.2 最终加固（锁外 spawn、任务绑定、票据边界） | 完成 |
-| P2-D 进程级 loopback | 未开始 |
+| P2-D 音频可靠性（按来源统计 / Channel / 稳定性） | 部分完成（热插拔恢复与进程级 loopback 未实现） |
 | P3 流式 ASR 协议与接口 | 协议/票据/VAD 准备完成（识别引擎未接入） |
 | P4 问题检测 | 未开始 |
 | P5 DeepSeek 问答 | 未开始 |

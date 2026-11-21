@@ -146,6 +146,22 @@ export interface AudioStatusPayload {
   since: number
   error?: string | null
   errorCode?: string | null
+  sources?: {
+    loopback?: AudioSourceStats | null
+    mic?: AudioSourceStats | null
+  }
+}
+export interface AudioSourceStats {
+  framesReceived: number
+  framesDropped: number
+  duplicates: number
+  invalid: number
+  peakDbfs?: number | null
+  rmsDbfs?: number | null
+  silenceDurationMs: number
+  lastFrameTimestamp?: number | null
+  currentSampleRate?: number | null
+  currentChannels?: number | null
 }
 export interface CaptureStartEvent {
   v: 1

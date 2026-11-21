@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from .frame import PAYLOAD_BYTES, FrameError, parse_frame
 from .level import peak_dbfs, rms_dbfs
 from .sink import AudioFrameSink
+from .source_stats import SourceStats
 from .stats import AudioCounters
 
 SEQUENCE_WINDOW = 1 << 32
@@ -75,6 +76,7 @@ class AudioSession:
         max_invalid_per_second: int = 25,
         max_rate_violations_per_second: int = 10,
         now: Callable[[], float] = time.monotonic,
+        source_stats: dict[str, SourceStats] | None = None,
     ) -> None:
         self._counters = counters
         self._sink = sink
@@ -84,6 +86,7 @@ class AudioSession:
         self._now = now
         self._bucket = _TokenBucket(float(max_frames_per_second), float(burst_frames), now())
         self._sources: dict[str, _SourceState] = {}
+        self._source_stats: dict[str, SourceStats] = source_stats if source_stats is not None else {}
         self._window_started = now()
         self._invalid_in_window = 0
         self._rate_violations_in_window = 0
@@ -126,6 +129,7 @@ class AudioSession:
             if delta == 0 or delta >= SEQUENCE_HALF:
                 self._counters.duplicates += 1
                 self._counters.dropped += 1
+                self._stats_for(frame.source).on_dropped("duplicate_sequence")
                 return FrameOutcome(False, "duplicate_sequence")
             if delta > 1:
                 self._counters.gaps += delta - 1
@@ -136,11 +140,13 @@ class AudioSession:
             self._counters.count_error("timestamp_invalid")
             self._counters.dropped += 1
             self._invalid_in_window += 1
+            self._stats_for(frame.source).on_dropped("timestamp_invalid")
             return FrameOutcome(False, "timestamp_invalid")
 
         if state.last_ts_ns is not None and frame.capture_ts_ns + TIMESTAMP_REGRESSION_NS < state.last_ts_ns:
             self._counters.timestamp_regressions += 1
             self._counters.dropped += 1
+            self._stats_for(frame.source).on_dropped("timestamp_regression")
             return FrameOutcome(False, "timestamp_regression")
 
         state.last_sequence = frame.sequence
@@ -153,6 +159,7 @@ class AudioSession:
         if self._counters.peak_dbfs is None or level > self._counters.peak_dbfs:
             self._counters.peak_dbfs = level
         self._counters.last_rms_dbfs = rms_dbfs(frame.payload)
+        self._stats_for(frame.source).on_frame(frame)
         self._sink.on_frame(frame)
         return FrameOutcome(True)
 
@@ -162,6 +169,13 @@ class AudioSession:
             self._invalid_in_window > self._max_invalid
             or self._rate_violations_in_window > self._max_rate_violations
         )
+
+    def source_stats(self) -> dict[str, dict[str, object]]:
+        """按来源返回累计统计快照。"""
+        return {name: stats.snapshot() for name, stats in self._source_stats.items()}
+
+    def _stats_for(self, source: str) -> SourceStats:
+        return self._source_stats.setdefault(source, SourceStats())
 
     def _roll_window(self, now: float) -> None:
         if now - self._window_started > VIOLATION_WINDOW_SECONDS:

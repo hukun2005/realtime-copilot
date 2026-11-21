@@ -488,6 +488,50 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 - 真实 ASR provider、转写装配、`asr.status` 广播与 UI 接线、延迟评测、Silero VAD 均未实现。
 - 本轮只冻结协议与接口，不宣称任何识别能力可用。
 
+## 2026-11-21 · P2-D：按来源统计、Channel 并发与 30 分钟稳定性
+
+分支：`feature/phase-2d-audio-reliability`（基线 `18613ee`）。
+
+### 按来源统计（P2-D-B）
+
+- `AudioSourceStats`：loopback / mic 分别维护 framesReceived、framesDropped、duplicates、
+  invalid、peakDbfs、rmsDbfs、silenceDurationMs、lastFrameTimestamp、currentSampleRate、currentChannels。
+- `AudioSession` 按 `frame.source` 更新对应来源；`AudioHub` 跨会话共享并汇总。
+- 协议扩展：`audio.status.payload.sources`（可选，loopback/mic 各自统计），`/healthz.audio.sources` 同源。
+
+### C# 并发模型（P2-D-C）
+
+- 有界 `Channel<AudioFrame>`（容量 200）+ 单消费者；回调只 `TryWrite`，网络发送在独立任务。
+- 满载策略：`BoundedChannelFullMode.Wait` 让 `TryWrite` 返回 false，丢弃新帧并计数（不阻塞回调）。
+- 停止顺序：取消 → 采集源 `StopAsync` → 取消订阅 → 发送任务退出；重复取消/停止不崩溃。
+- 新增测试：消费者阻塞时丢帧、取消后源恰好 Stop 一次、停止后 Emit 不抛异常。
+
+### 稳定性报告（P2-D-A）
+
+`scripts/capture-stability.ps1` 记录：Git SHA、sidecar 版本、采集模式、起止时间、
+理论/实际帧数、丢帧/重复/无效、CPU/WorkingSet/PrivateBytes、状态迁移、sidecar 退出码；
+判定 PASS 需要同时满足：最终 idle、时长足够、采样数 ≥ 90% 期望、最大采样间隔 ≤ 3×周期、
+帧数偏差 ≤ max(200, 5%)。报告写入 `artifacts/capture-stability`。
+
+### 实际执行与结果
+
+| 运行 | 结果 |
+|---|---|
+| 模拟音频 30 分钟 | **PASS**：180 采样点、90320 帧、50.06 fps、0 gaps/duplicates/invalid/rateLimited、maxGap 10.1s、frameDelta 24、CPU +21.83s、WorkingSet +13.91MB、PrivateBytes +10.59MB、最终 idle |
+| 真实 WASAPI loopback 30 分钟 | **PASS**：180 采样点、90305 帧、50.06 fps、peak -5.1 dBFS、rms -13.5 dBFS、silence 3.16s、0 gaps/duplicates/invalid/rateLimited、maxGap 10.1s、frameDelta 19、CPU +25.61s、WorkingSet +10.72MB、PrivateBytes +7.72MB、最终 idle |
+| `uv run pytest -q` | **234 passed, 1 skipped** |
+| `dotnet test services/audio-capture/tests -c Release` | **81 passed** |
+| `uv run ruff check .` | All checks passed |
+
+两次运行都绑定运行时 HEAD `18613ee`（本地未提交改动不包含在 SHA 中，这是报告口径的已知限制）。
+
+### 未完成（明确标记）
+
+- **设备热插拔自动恢复未实现**：没有 DEVICE_LOST/RECOVERING/ERROR 状态机、没有三次指数退避重试。
+- **进程级 loopback 未实现**：`WithProcessLoopback` 能力探测与腾讯会议/微信实机验证均
+  **NOT_VERIFIED**，本轮未做任何能力声明。
+- 真实 30 分钟只在本机（Windows 11 26300 + Senary 虚拟声卡 + 测试音）完成，未在目标会议室机器复测。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -500,3 +544,4 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 | 2026-11-20 | P2-C.1：控制面并发锁、会话代次、统一清理与迟到状态处理 |
 | 2026-11-21 | P2-C.2：锁外 spawn、会话任务绑定、disconnect 竞态与票据边界加固 |
 | 2026-11-21 | P3：ASR 协议冻结、票据 purpose、ASR 状态分离与能量 VAD |
+| 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |

@@ -144,20 +144,6 @@ class HeartbeatPayload(BaseModel):
     nonce: Annotated[str | None, Field(max_length=64, min_length=1)] = None
 
 
-class AudioStatusPayload(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-        populate_by_name=True,
-    )
-    state: Literal['idle', 'starting', 'capturing', 'stopping', 'error']
-    source: Literal['loopback', 'mic'] | None = None
-    device_id: Annotated[str | None, Field(alias='deviceId', max_length=256)] = None
-    mode: Literal['loopback', 'mic', 'process'] | None = None
-    since: Annotated[int, Field(ge=0)]
-    error: Annotated[str | None, Field(max_length=500)] = None
-    error_code: Annotated[str | None, Field(alias='errorCode', max_length=64)] = None
-
-
 class LoopbackOptions(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -255,19 +241,6 @@ class PongEvent(BaseModel):
     request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
     ts: Annotated[int, Field(ge=0)]
     payload: HeartbeatPayload
-
-
-class AudioStatusEvent(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-        populate_by_name=True,
-    )
-    v: Literal[1]
-    type: Literal['audio.status']
-    event_id: Annotated[EventId, Field(alias='eventId')]
-    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
-    ts: Annotated[int, Field(ge=0)]
-    payload: AudioStatusPayload
 
 
 class CaptureStartEvent(BaseModel):
@@ -437,6 +410,64 @@ class AsrErrorEvent(BaseModel):
     request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
     ts: Annotated[int, Field(ge=0)]
     payload: AsrErrorPayload
+
+
+class AudioSourceStats(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    frames_received: Annotated[int, Field(alias='framesReceived', ge=0)]
+    frames_dropped: Annotated[int, Field(alias='framesDropped', ge=0)]
+    duplicates: Annotated[int, Field(ge=0)]
+    invalid: Annotated[int, Field(ge=0)]
+    peak_dbfs: Annotated[float | None, Field(alias='peakDbfs')] = None
+    rms_dbfs: Annotated[float | None, Field(alias='rmsDbfs')] = None
+    silence_duration_ms: Annotated[int, Field(alias='silenceDurationMs', ge=0)]
+    last_frame_timestamp: Annotated[
+        int | None, Field(alias='lastFrameTimestamp', ge=0)
+    ] = None
+    current_sample_rate: Annotated[
+        int | None, Field(alias='currentSampleRate', ge=0)
+    ] = None
+    current_channels: Annotated[int | None, Field(alias='currentChannels', ge=0)] = None
+
+
+class Sources(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    loopback: AudioSourceStats | None = None
+    mic: AudioSourceStats | None = None
+
+
+class AudioStatusPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    state: Literal['idle', 'starting', 'capturing', 'stopping', 'error']
+    source: Literal['loopback', 'mic'] | None = None
+    device_id: Annotated[str | None, Field(alias='deviceId', max_length=256)] = None
+    mode: Literal['loopback', 'mic', 'process'] | None = None
+    since: Annotated[int, Field(ge=0)]
+    error: Annotated[str | None, Field(max_length=500)] = None
+    error_code: Annotated[str | None, Field(alias='errorCode', max_length=64)] = None
+    sources: Sources | None = None
+
+
+class AudioStatusEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['audio.status']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: AudioStatusPayload
 
 
 class EventV1(

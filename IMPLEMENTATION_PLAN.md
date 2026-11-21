@@ -213,9 +213,23 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 - [ ] 腾讯会议/微信/浏览器三场景实机记录。
 - [ ] 30 分钟测试的结论需要按目标机器复测（本机为 Windows 11 26300 + Senary 虚拟声卡）。
 
-## Phase 2-D — 进程级 loopback（可选增强）
+## Phase 2-D — 音频可靠性增强（部分完成，可选增强）
 
-**状态**：未开始。
+**状态**：按来源统计、Channel 并发模型与稳定性报告已完成；设备热插拔恢复与进程级 loopback 未实现。
+
+**已完成**
+
+| 项 | 内容 |
+|---|---|
+| 按来源统计 | `AudioSourceStats` + `AudioSession`/`AudioHub`：loopback 与 mic 独立计数、峰值/RMS、静音时长、时间戳、采样率/声道；`audio.status.sources` 与 `/healthz.audio.sources` |
+| C# 并发模型 | 有界 `Channel<AudioFrame>`（容量 200）+ 单消费者；回调只入队；满载 `DropWrite` 可计数；停止顺序：取消 → 源 Stop → 发送任务退出 |
+| 稳定性报告 | `scripts/capture-stability.ps1`：Git SHA、sidecar 版本、模式、起止时间、理论/实际帧数、丢帧/重复/无效、CPU/内存、状态迁移、sidecar 退出码；输出 `artifacts/capture-stability` |
+
+**未完成**
+
+- 设备热插拔自动恢复（DEVICE_LOST/RECOVERING/ERROR）与最多三次指数退避重试。
+- 进程级 loopback 能力探测与腾讯会议/微信实机验证（NOT_VERIFIED）。
+- 真实 WASAPI 30 分钟与模拟 30 分钟的双跑结果：见 `BUILD_LOG.md`（只记录实际完成的运行）。
 
 ## Phase 3 — 流式 ASR
 
