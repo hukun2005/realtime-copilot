@@ -89,18 +89,31 @@ class DashScopeParaformerProvider(AsrProvider):
         if not ticket:
             raise AsrAuthError("asr_auth_failed", "missing asr ticket")
         self._state = "connecting"
+        socket: Any = None
         try:
             socket = await self._open_socket()
-        except AsrError:
-            self._state = "error"
-            raise
-        try:
             await self._run_task(socket)
             await self._send_audio(socket, b"\x00\x00" * 1600)  # 100ms 静音
             await self._finish_task(socket)
-            await self._wait_terminal(socket, deadline_seconds=10.0)
+            await self._await_terminal(socket, deadline_seconds=10.0)
+        except asyncio.CancelledError:
+            self._state = "idle"
+            raise
+        except ValueError:
+            self._state = "idle"
+            raise
+        except AsrError:
+            self._state = "error"
+            raise
+        except Exception as error:
+            self._state = "error"
+            raise AsrError(
+                "asr_connection_lost",
+                f"aliyun handshake failed: {error}",
+            ) from error
         finally:
-            await self._close_socket(socket)
+            if socket is not None:
+                await self._close_socket(socket)
         self._state = "ready"
 
     async def transcribe(self, segment: SpeechSegment) -> AsyncIterator[AsrResult]:
@@ -267,17 +280,43 @@ class DashScopeParaformerProvider(AsrProvider):
             raise AsrError("asr_timeout", "aliyun receive timed out", retryable=True) from error
         return _parse(raw)
 
-    async def _wait_terminal(self, socket: Any, *, deadline_seconds: float) -> None:
+    async def _await_terminal(self, socket: Any, *, deadline_seconds: float) -> None:
+        """等待并校验 task 终止事件；任何异常都不得被当作成功。"""
         loop = asyncio.get_running_loop()
         deadline = loop.time() + deadline_seconds
-        while loop.time() < deadline:
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                self._metrics["timeout_count"] += 1
+                raise AsrError("asr_timeout", "aliyun handshake timed out", retryable=True)
             try:
-                message = await asyncio.wait_for(socket.recv(), timeout=max(0.0, deadline - loop.time()))
-            except Exception:
+                raw = await asyncio.wait_for(
+                    socket.recv(),
+                    timeout=min(remaining, self._config.receive_timeout_seconds),
+                )
+            except TimeoutError as error:
+                self._metrics["timeout_count"] += 1
+                raise AsrError("asr_timeout", "aliyun handshake timed out", retryable=True) from error
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                raise AsrError(
+                    "asr_connection_lost",
+                    f"aliyun socket closed during handshake: {error}",
+                ) from error
+
+            message = _parse(raw)
+            if not message:
+                raise AsrError("asr_provider_error", "protocol error: malformed handshake message")
+            event = _event(message)
+            if event == "task-finished":
                 return
-            event = _event(_parse(message))
-            if event in ("task-finished", "task-failed"):
-                return
+            if event == "task-failed":
+                raise _task_error(message)
+            raise AsrError(
+                "asr_provider_error",
+                f"protocol error: unexpected event {event!r}",
+            )
 
 
     def _run_payload(self, task: str) -> dict[str, Any]:
@@ -323,6 +362,19 @@ def _parse(raw: Any) -> dict[str, Any]:
 
 def _event(message: dict[str, Any]) -> str:
     return str((message.get("header") or {}).get("event") or "")
+
+
+def _task_error(message: dict[str, Any]) -> AsrError:
+    header = message.get("header") or {}
+    code = str(header.get("error_code") or "").strip()
+    text = str(header.get("error_message") or "aliyun task failed").strip()
+    lowered = code.lower()
+    detail = f"{code}: {text}" if code else text
+    if any(marker in lowered for marker in ("auth", "unauthor", "forbidden", "401", "403")):
+        return AsrAuthError("asr_auth_failed", detail)
+    if any(marker in lowered for marker in ("rate", "limit", "429")):
+        return AsrError("asr_rate_limited", detail, retryable=True)
+    return AsrError("asr_provider_error", detail)
 
 
 def _error_text(message: dict[str, Any]) -> str:

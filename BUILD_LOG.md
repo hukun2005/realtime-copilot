@@ -1068,7 +1068,28 @@ Python **330 passed / 3 skipped**；ruff 通过；C# 91；协议 26；桌面 11�
 - 真实会议 WER：未测量。
 - 腾讯会议 / 微信 PC：NOT_VERIFIED。
 
+## 2026-11-22 · P3.2.10：Aliyun 握手验证失败处理
+
+基线 `115cfaa`；分支 `feature/p3-3-paraformer-connection-reuse`（P3.2.10 先单独提交）。
+
+### 修复
+
+- `connect()` 仅在收到 `task-finished` 后进入 READY。
+- `task-failed` → `AsrError`，保留服务端 `error_code` 与安全消息；认证类错误映射 `asr_auth_failed`，
+  限流类映射 `asr_rate_limited`，其余 `asr_provider_error`。
+- 接收超时 → `asr_timeout`；socket 断开 → `asr_connection_lost`；未知/畸形事件 → 协议错误。
+- `CancelledError` 向上传播，状态回到 idle。
+- 所有路径 finally 关闭 socket；失败后状态为 error，`active_web_sockets` 归零。
+
+### 测试
+
+新增 8 个：正常结束、task-failed（含错误码保留）、认证失败、超时、socket 断开、
+未知事件、畸形消息、connect 取消。
+
+Python **338 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
