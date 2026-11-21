@@ -1088,7 +1088,39 @@ Python **330 passed / 3 skipped**；ruff 通过；C# 91；协议 26；桌面 11�
 
 Python **338 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P3.3：Paraformer WebSocket 连接复用
+
+基线 `8f6458e`（P3.2.10 合并后）。
+
+### 官方协议依据
+
+- 阿里云文档明确 `run-task` / `finish-task` 支持串行复用连接：
+  https://help.aliyun.com/zh/model-studio/speech-recognition-best-practices
+- 同一连接不并行任务；任务失败/网络异常后应废弃连接；空闲约 60 秒可能被服务端关闭。
+
+### 实现
+
+- 每来源一个 `_Session`（socket + last_used + task 数）与一把来源锁。
+- 同一来源 FIFO 串行：`run-task → task-started → PCM → finish-task → task-finished` 后才执行下一 Segment。
+- `task_id` 每任务重新生成；结果仍按 Segment 输出 partial/final（多句合并为一个 final）。
+- 空闲超过 `idle_timeout_seconds`（默认 50s）在下次任务前重建连接。
+- 失败：关闭并废弃连接；若尚未产出任何结果，用新连接重试当前 Segment 一次；
+  已产出 partial 则不重试，交由 Manager 发 `asr.error`。
+- `close()`/`cancel()` 关闭所有来源连接，幂等；`active_web_sockets` 归零。
+- 指标新增 `connections_created`、`connections_reused`、`idle_closes`、`tasks_completed`。
+- `reuse_connections=False` 保留旧的每 Segment 建连模式，用于 A/B 对比。
+
+### 真实 API（本机 Key）
+
+`scripts/aliyun_reuse_check.py`，3 个 Segment：
+
+| 模式 | 连接创建 | 任务 | Final | 总耗时 | Final P50 | P95 |
+|---|---|---|---|---|---|---|
+| 复用 | 1 | 3 | 3 | 3.1s | 330.5ms | 489.0ms |
+| 每段建连 | 0（3 次 attempt） | 0 | 3 | 5.8s | 741.7ms | 865.6ms |
+
 ### 变更记录
+
 
 
 

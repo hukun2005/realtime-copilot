@@ -74,6 +74,7 @@ def make_provider(socket: FakeSocket, **overrides: Any) -> tuple[DashScopeParafo
         "name": "aliyun",
         "api_key_env": "ASR_TEST_KEY",
         "workspace_id": "ws-test",
+        "reuse_connections": False,
     }
     values.update(overrides)
     config = AsrProviderConfig(**values)

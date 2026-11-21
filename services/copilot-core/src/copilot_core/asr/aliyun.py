@@ -17,12 +17,21 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from .provider import AsrAuthError, AsrError, AsrProvider, AsrProviderConfig, AsrResult, env_api_key
 from .vad import SpeechSegment
 
 DEFAULT_MODEL = "paraformer-realtime-v2"
+
+
+@dataclass
+class _Session:
+    source: str
+    socket: Any
+    last_used: float
+    tasks: int = 0
 
 
 class DashScopeParaformerProvider(AsrProvider):
@@ -46,6 +55,8 @@ class DashScopeParaformerProvider(AsrProvider):
         self._closed = False
         self._active: set[Any] = set()
         self._latencies: list[tuple[float, float]] = []
+        self._sessions: dict[str, _Session] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
         self._metrics: dict[str, float] = {
             "connection_attempts": 0,
             "connection_successes": 0,
@@ -56,6 +67,10 @@ class DashScopeParaformerProvider(AsrProvider):
             "rate_limited_count": 0,
             "timeout_count": 0,
             "provider_error_count": 0,
+            "connections_created": 0,
+            "connections_reused": 0,
+            "idle_closes": 0,
+            "tasks_completed": 0,
         }
 
     def status(self) -> str:
@@ -117,6 +132,128 @@ class DashScopeParaformerProvider(AsrProvider):
         self._state = "ready"
 
     async def transcribe(self, segment: SpeechSegment) -> AsyncIterator[AsrResult]:
+        """按来源复用 WebSocket；同一来源串行执行任务。"""
+        if not self._config.reuse_connections:
+            async for result in self._transcribe_once(segment):
+                yield result
+            return
+
+        lock = self._locks.setdefault(segment.source, asyncio.Lock())
+        async with lock:
+            emitted = False
+            try:
+                session = await self._session_for(segment.source)
+                async for result in self._execute_on(session, segment):
+                    emitted = True
+                    yield result
+            except asyncio.CancelledError:
+                await self._discard(segment.source)
+                raise
+            except AsrError:
+                await self._discard(segment.source)
+                if emitted:
+                    raise
+                # 失败且尚未产出结果时，用新连接重试一次当前 Segment。
+                session = await self._session_for(segment.source, force=True)
+                async for result in self._execute_on(session, segment):
+                    yield result
+            except Exception as error:
+                await self._discard(segment.source)
+                raise AsrError(
+                    "asr_connection_lost",
+                    f"aliyun reuse failed: {error}",
+                    retryable=True,
+                ) from error
+
+    async def _session_for(self, source: str, *, force: bool = False) -> _Session:
+        loop = asyncio.get_running_loop()
+        session = self._sessions.get(source)
+        now = loop.time()
+        if (
+            session is not None
+            and not force
+            and now - session.last_used < self._config.idle_timeout_seconds
+        ):
+            self._metrics["connections_reused"] += 1
+            return session
+        if session is not None:
+            if not force:
+                self._metrics["idle_closes"] += 1
+            await self._discard(source)
+        socket = await self._open_socket()
+        created = _Session(source=source, socket=socket, last_used=loop.time())
+        self._sessions[source] = created
+        self._metrics["connections_created"] += 1
+        return created
+
+    async def _discard(self, source: str) -> None:
+        session = self._sessions.pop(source, None)
+        if session is None:
+            return
+        with contextlib.suppress(Exception):
+            await session.socket.close()
+        self._active.discard(session.socket)
+
+    async def _execute_on(self, session: _Session, segment: SpeechSegment) -> AsyncIterator[AsrResult]:
+        socket = session.socket
+        await self._run_task(socket)
+        await self._send_audio(socket, segment.pcm16)
+        await self._finish_task(socket)
+
+        revision = 0
+        committed = ""
+        started_at = time.monotonic()
+        first_partial_ms = 0.0
+        while True:
+            message = await self._receive(socket)
+            event = _event(message)
+            if event == "task-failed":
+                self._metrics["provider_error_count"] += 1
+                raise _task_error(message)
+            if event == "task-finished":
+                session.last_used = asyncio.get_running_loop().time()
+                session.tasks += 1
+                self._metrics["tasks_completed"] += 1
+                if committed:
+                    final_ms = (time.monotonic() - started_at) * 1000
+                    self._latencies.append((first_partial_ms, final_ms))
+                    if len(self._latencies) > 5000:
+                        del self._latencies[:1000]
+                    revision += 1
+                    yield AsrResult(
+                        segment_id=segment.segment_id,
+                        source=segment.source,
+                        revision=revision,
+                        text=committed,
+                        start_ts_ns=segment.start_ts_ns,
+                        end_ts_ns=segment.end_ts_ns,
+                        final=True,
+                    )
+                return
+
+            sentence = _sentence(message)
+            if not sentence:
+                continue
+            text = str(sentence.get("text") or "").strip()
+            if not text:
+                continue
+            if first_partial_ms == 0.0:
+                first_partial_ms = (time.monotonic() - started_at) * 1000
+            if sentence.get("sentence_end"):
+                committed = f"{committed}{text}" if committed else text
+                text = committed
+            revision += 1
+            yield AsrResult(
+                segment_id=segment.segment_id,
+                source=segment.source,
+                revision=revision,
+                text=text,
+                start_ts_ns=segment.start_ts_ns,
+                end_ts_ns=segment.end_ts_ns,
+                final=False,
+            )
+
+    async def _transcribe_once(self, segment: SpeechSegment) -> AsyncIterator[AsrResult]:
         if segment.sample_rate != self._config.sample_rate or segment.channels != self._config.channels:
             raise AsrError(
                 "asr_invalid_audio",
@@ -199,9 +336,13 @@ class DashScopeParaformerProvider(AsrProvider):
             await self._close_socket(socket)
 
     async def cancel(self) -> None:
+        """关闭所有来源的连接与会话；幂等。"""
+        for source in list(self._sessions):
+            await self._discard(source)
         for socket in list(self._active):
             with contextlib.suppress(Exception):
                 await socket.close()
+            self._active.discard(socket)
 
     async def close(self) -> None:
         if self._closed:
