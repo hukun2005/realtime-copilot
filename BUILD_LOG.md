@@ -677,6 +677,57 @@ WebRTC 不可用、单段预算、全局预算、消费释放、优雅停止、�
   **本轮未执行**，不标记通过。
 - 队列满载、ASR 消费不足、取消、设备断开由单元测试覆盖，未做长时间 soak。
 
+## 2026-11-21 · P3.2：真实 ASR Provider 运行时
+
+分支：`feature/p3-2-asr-runtime`（基线 `d5914c5`）。
+
+### Provider 抽象与注册表
+
+- `AsrProvider` 协议：`connect` / `transcribe` / `cancel` / `close` / `status`，
+  结果用 `AsrResult`（segmentId、source、revision、text、时间戳、final、confidence）。
+- `AsrProviderConfig`：语言、采样率、声道、模型、API Key 环境变量名。
+- `AsrRegistry`：按名字创建 Provider；已注册 `deepgram`。
+
+### AsrManager
+
+- 状态 IDLE/CONNECTING/READY/ERROR，独立于采集状态机；每次变化广播 `asr.status`。
+- 启动时签发 `purpose=asr`、绑定 generation 的一次性票据并消费；generation 不符拒绝启动。
+- loopback / mic 各一个串行消费者；每段有超时；停止取消消费者并关闭 Provider。
+- 结果经 `AsrStreamTracker` 校验：revision 单调、final 后拒绝旧 partial、同段只 final 一次；
+  冲突以 `asr.error(asr_segment_conflict)` 广播。
+- 旧会话/已停止后的迟到结果不广播。
+
+### 真实 Provider（Deepgram，未验证）
+
+- `DeepgramProvider`：WebSocket `wss://api.deepgram.com/v1/listen`，PCM16/16k/单声道，
+  `interim_results=true`；API Key 仅从环境变量读取。
+- **本机无 API Key，未完成真实连接/识别验证，标记 NOT_VERIFIED。**
+- 每个 Segment 建立独立连接（实现简单、可审计），未做连接复用。
+
+### 事件广播
+
+`asr.status` / `asr.partial` / `asr.final` / `asr.error` 通过 Core 现有 broadcast 发送；
+Provider 不直接接触 WebSocket。`/healthz.asr` 暴露状态快照；`RTC_ASR_PROVIDER` 未设置时保持 IDLE。
+
+### 测试
+
+新增 14 个：启动/票据消费、partial+final、final 后旧 partial、超时、连接失败、认证失败、
+旧 generation 拒绝、双来源、stop 幂等、取消、停止后迟到结果、Provider 注册、转写失败。
+Provider 全部使用 Mock；真实网络路径未测。
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **270 passed, 1 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed（本轮未改 C#） |
+| `pnpm -C packages/protocol test` | 26 passed |
+
+### 未完成（真实识别）
+
+- 真实 Provider 连接、真实 PCM 识别、Partial/Final 延迟、WER、成本、内存峰值：
+  **NOT_VERIFIED**（无 API Key，未执行）。
+- 真实会议音频评测语料未建立（按要求不上传隐私音频）。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -691,5 +742,6 @@ WebRTC 不可用、单段预算、全局预算、消费释放、优雅停止、�
 | 2026-11-21 | P3：ASR 协议冻结、票据 purpose、ASR 状态分离与能量 VAD |
 | 2026-11-21 | P3.1：完整 PCM Ring Buffer、VAD 运行时流水线与有界 ASR 队列 |
 | 2026-11-21 | P3.1.1：PCM 口径、双指标 VAD、Provider 抽象、PCM 预算与生命周期 |
+| 2026-11-21 | P3.2：ASR Provider 抽象、Manager、票据校验、事件广播与 Deepgram 适配器（未验证） |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
