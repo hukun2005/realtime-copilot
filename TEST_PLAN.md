@@ -345,3 +345,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 指标 | 连接/重连/限流/超时计数与 activeWebSockets |
 
 30/60 分钟：**NOT_RUN**。
+
+
+### P3.2.9 ASR 统计
+
+| 类别 | 断言 |
+|---|---|
+| 错误计数 | 单次/连续/不同错误码各计一次；snapshot 与内部一致；广播失败仍计数 |
+| bySource | loopback/mic 的 partial/final 分别计数 |
+| Provider 指标 | 失败连接不计成功；验证/取消/超时后 active sockets 归零；重连只计重试 |
+| 延迟口径 | 只统计 Segment 内 first partial/final，不是端到端回答延迟 |
