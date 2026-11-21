@@ -1024,7 +1024,52 @@ capture.stop()
 - 每次 Segment 一条 WebSocket（1994 次连接），未做连接复用。
 - 未采集端到端字幕延迟（只有 Segment 内首次 partial / final 延迟）。
 
+## 2026-11-21 · P3.2.9：ASR 统计修复与阶段状态统一
+
+分支：`feature/p3-2-9-asr-metrics-docs`（基线 `7e35b12`）。
+
+### 修复
+
+- `AsrManager._publish_error()` 中 `error_codes` 被重复累加（一次错误计两次），
+  导致 60 分钟报告中 `errors=45` 而 `errorCodes=90`。
+- 现在一次错误只增加 `errors +1`、对应错误码 `+1`；先计数再广播，
+  广播失败仍保留“错误已发生”的计数。
+
+### 指标口径（Aliyun Paraformer）
+
+| 指标 | 口径 |
+|---|---|
+| `connection_attempts` | 每个 Segment 的握手尝试次数（含验证连接） |
+| `connection_successes` / `failures` | 握手成功/失败次数；失败不计成功 |
+| `connection_duration_ms` | 仅 WebSocket 握手耗时，不含音频发送与识别等待 |
+| `segment_count` | 进入 transcribe 的 Segment 数 |
+| `reconnect_count` | 仅 429/5xx 重试次数，普通首次连接不计 |
+| `rate_limited_count` / `timeout_count` / `provider_error_count` | 对应错误路径次数 |
+| `active_web_sockets` | 当前未关闭的 socket 数；正常/取消/超时/异常路径都会归零 |
+| `latencySamples` | 有 final 的 Segment 数（上限 5000） |
+| `firstPartialP50Ms/P95Ms` | Segment 内首次 partial 相对 transcribe 开始的延迟 |
+| `finalP50Ms/P95Ms` | Segment 内 final 相对 transcribe 开始的延迟 |
+
+这些是 **Segment 级识别延迟**，不是端到端面试回答延迟。
+
+### 新增测试（11 个）
+
+错误单次/连续/不同码计数、snapshot 一致性、广播失败计数、bySource、
+失败连接不增加成功、验证连接后 active 归零、超时释放 socket、
+正常路径无重连、连接耗时只含握手。
+
+### 结果
+
+Python **330 passed / 3 skipped**；ruff 通过；C# 91；协议 26；桌面 11；typecheck 通过。
+
+### 未完成
+
+- 持续实时流式 ASR（P3.3）：未开始。
+- 真实会议 WER：未测量。
+- 腾讯会议 / 微信 PC：NOT_VERIFIED。
+
 ### 变更记录
+
 
 
 

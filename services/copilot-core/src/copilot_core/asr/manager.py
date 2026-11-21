@@ -244,8 +244,8 @@ class AsrManager:
         segment_id: str | None = None,
         retryable: bool = False,
     ) -> None:
+        # 同一次错误只计一次；先计数再广播，广播失败也保留已发生的错误。
         self._errors += 1
-        self._error_codes[code] = self._error_codes.get(code, 0) + 1
         self._error_codes[code] = self._error_codes.get(code, 0) + 1
         await self._broadcast(
             make_asr_error(code=code, message=message, segment_id=segment_id, retryable=retryable)
