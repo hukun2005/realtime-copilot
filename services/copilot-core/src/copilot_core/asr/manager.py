@@ -44,6 +44,9 @@ class AsrManager:
         self._logger = logger
         self._tasks: list[asyncio.Task[None]] = []
         self._active = False
+        self._partials = 0
+        self._finals = 0
+        self._errors = 0
         self._current_generation = current_generation
 
     @property
@@ -67,6 +70,9 @@ class AsrManager:
             "generation": self._generation,
             "errorCode": self._tracker.error_code,
             "error": self._tracker.error,
+            "partials": self._partials,
+            "finals": self._finals,
+            "errors": self._errors,
         }
 
     async def start(self) -> bool:
@@ -207,6 +213,10 @@ class AsrManager:
             await self._publish_error("asr_segment_conflict", str(error), segment.segment_id)
             return
 
+        if result.final:
+            self._finals += 1
+        else:
+            self._partials += 1
         event = make_asr_result(
             "asr.final" if result.final else "asr.partial",
             segment_id=result.segment_id,
@@ -227,6 +237,7 @@ class AsrManager:
         segment_id: str | None = None,
         retryable: bool = False,
     ) -> None:
+        self._errors += 1
         await self._broadcast(
             make_asr_error(code=code, message=message, segment_id=segment_id, retryable=retryable)
         )

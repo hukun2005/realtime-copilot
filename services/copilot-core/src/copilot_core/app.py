@@ -115,9 +115,17 @@ def create_app(
     provider_name = os.environ.get("RTC_ASR_PROVIDER")
     if provider_name:
         try:
+            key_env = (
+                "DASHSCOPE_API_KEY"
+                if provider_name == "aliyun"
+                else "DEEPGRAM_API_KEY"
+                if provider_name == "deepgram"
+                else "ASR_API_KEY"
+            )
             provider_config = AsrProviderConfig(
                 name=provider_name,
                 language=os.environ.get("RTC_ASR_LANGUAGE", "zh-CN"),
+                api_key_env=key_env,
                 model=os.environ.get("RTC_ASR_MODEL") or None,
                 workspace_id=(
                     os.environ.get("DASHSCOPE_WORKSPACE_ID")
