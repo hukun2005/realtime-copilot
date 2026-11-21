@@ -13,7 +13,20 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 - Electron + Vue3 桌面骨架：状态展示、IPC 白名单、Core 连接
 - GitHub Actions 四作业 CI（含 Windows 真实 60 秒音频端到端）
 
-**尚未实现**：VAD、ASR、问题检测、DeepSeek 问答、悬浮窗、进程级 loopback（按进程采集，Phase 2-D）。
+## 当前能力状态
+
+| 能力 | 状态 |
+|---|---|
+| WASAPI loopback / mic 采集、二进制帧 v1 | 已实现 |
+| 设备恢复、稳定性报告 | 已实现；真实热插拔 **NOT_VERIFIED** |
+| VAD（Energy VAD + 完整 PCM 片段） | 已实现；真实噪声评测 **NOT_VERIFIED** |
+| Deepgram Provider（Segment 级） | 代码已实现；真实连接 **NOT_VERIFIED**（无 API Key） |
+| ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
+| 持续实时流式 ASR | **尚未实现**（P3.3） |
+| 30/60 分钟 ASR 联合测试 | **NOT_RUN** |
+| 进程级 loopback（按进程采集） | 能力探测已实现；目标应用 **NOT_VERIFIED** |
+| 腾讯会议 / 微信 PC 兼容 | **NOT_VERIFIED** |
+| 问题检测、DeepSeek 问答、悬浮窗 | 尚未实现 |
 
 性能目标（P50 < 1s / P95 < 2s）在后续阶段测量，**当前没有任何延迟数据**，详见 [TEST_PLAN.md](TEST_PLAN.md)。
 

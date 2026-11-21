@@ -108,6 +108,8 @@ class AsrManager:
         """停止消费者、取消 Provider 并回到 IDLE；可重复调用。"""
         if not self._active and not self._tasks:
             self._tracker.reset()
+            with suppress(Exception):
+                await self._provider.close()
             return
         self._active = False
         tasks = list(self._tasks)

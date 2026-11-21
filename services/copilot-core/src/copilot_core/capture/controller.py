@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -86,7 +87,8 @@ class CaptureController:
         self._source_stats = source_stats
         self._on_capture_start = on_capture_start
         self._on_capture_stop = on_capture_stop
-        self._asr_task: asyncio.Task[None] | None = None
+        self._asr_tasks: set[asyncio.Task[None]] = set()
+        self._asr_shutdown = False
         self._lock = asyncio.Lock()
         self._machine = CaptureStateMachine()
         self._session: _Session | None = None
@@ -240,7 +242,9 @@ class CaptureController:
         await self._conclude_stop(session)
 
     async def shutdown(self) -> None:
-        """Core 关闭：停止 sidecar 并等待退出，尽量不留残留进程。"""
+        """Core 关闭：停止 ASR 生命周期任务，再停止 sidecar 并等待退出。"""
+        self._asr_shutdown = True
+        await self.wait_for_asr_tasks()
         emit: list[Any] = []
         async with self._lock:
             self._shutting_down = True
@@ -543,14 +547,31 @@ class CaptureController:
             await process.wait()
 
     def _notify_asr_start(self, generation: int) -> None:
-        if self._on_capture_start is None:
+        if self._on_capture_start is None or self._asr_shutdown:
             return
-        self._asr_task = asyncio.create_task(self._run_asr_start(generation))
+        self._track_asr(asyncio.create_task(self._run_asr_start(generation)))
 
     def _notify_asr_stop(self) -> None:
         if self._on_capture_stop is None:
             return
-        self._asr_task = asyncio.create_task(self._run_asr_stop())
+        self._track_asr(asyncio.create_task(self._run_asr_stop()))
+
+    def _track_asr(self, task: asyncio.Task[None]) -> None:
+        self._asr_tasks.add(task)
+        task.add_done_callback(self._asr_tasks.discard)
+
+    async def wait_for_asr_tasks(self, *, deadline_seconds: float = 5.0) -> None:
+        """等待 ASR 生命周期任务结束；用于 stop/shutdown。"""
+        tasks = list(self._asr_tasks)
+        if not tasks:
+            return
+        done, pending = await asyncio.wait(tasks, timeout=deadline_seconds)
+        for task in pending:
+            task.cancel()
+        for task in done | pending:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        self._asr_tasks.clear()
 
     async def _run_asr_start(self, generation: int) -> None:
         try:
