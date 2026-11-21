@@ -191,6 +191,15 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 | 票据用途 | audio 票据不能当 asr 用；asr 票据必须带 generation；过期/重放/旧会话/结束会话拒绝；payload 不含密钥 |
 | VAD | 能量阈值、speech_started/ongoing/ended、最短语音、Ring Buffer 上限与丢弃计数、loopback/mic 独立、时间戳单调 |
 
+### P3.1 运行时接线
+
+| 类别 | 断言 |
+|---|---|
+| 片段 | pre-roll 与起始确认帧纳入；结束时间取最后有效语音；结束静音单独记录；超长切分 |
+| Ring Buffer | 有界、覆盖计数；loopback/mic 独立 |
+| ASR 队列 | 帧队列与 Segment 队列均有界；满时计数丢弃；stop 时 flush；VAD 异常不断采集 |
+| 真实 PCM | `fixtures/vad-sample.wav` 合成音频产出片段，PCM 与输入一致 |
+
 说明：本轮不包含真实 ASR provider、转写装配与延迟评测。
 
 ## 5B. 音频可靠性（P2-D）

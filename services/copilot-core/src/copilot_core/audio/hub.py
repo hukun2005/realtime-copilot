@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..asr.pipeline import AsrPipeline
 from ..config import AudioConfig
 from .session import AudioSession
 from .sink import InMemoryAudioSink
@@ -20,6 +21,7 @@ class AudioHub:
         self.sink = InMemoryAudioSink()
         self._sessions = 0
         self.source_stats: dict[str, SourceStats] = {}
+        self.pipeline = AsrPipeline()
 
     def open_session(self) -> AudioSession:
         """为一条新音频连接创建会话。
@@ -37,6 +39,7 @@ class AudioHub:
             max_invalid_per_second=self._config.max_invalid_per_second,
             max_rate_violations_per_second=self._config.max_rate_violations_per_second,
             source_stats=self.source_stats,
+            vad_ingest=self.pipeline.ingest,
         )
 
     def close_session(self) -> None:
@@ -64,6 +67,7 @@ class AudioHub:
             "errorCodes": dict(counters.error_codes),
             "sessions": self._sessions,
             "sinkFrames": self.sink.frames,
+            "vad": self.pipeline.snapshot(),
             "sources": {
                 name: stats.snapshot() for name, stats in self.source_stats.items()
             },

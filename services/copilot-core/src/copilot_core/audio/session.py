@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ..asr.vad import VadFrame
 from .frame import PAYLOAD_BYTES, FrameError, parse_frame
 from .level import peak_dbfs, rms_dbfs
 from .sink import AudioFrameSink
@@ -77,6 +78,7 @@ class AudioSession:
         max_rate_violations_per_second: int = 10,
         now: Callable[[], float] = time.monotonic,
         source_stats: dict[str, SourceStats] | None = None,
+        vad_ingest=None,
     ) -> None:
         self._counters = counters
         self._sink = sink
@@ -87,6 +89,8 @@ class AudioSession:
         self._bucket = _TokenBucket(float(max_frames_per_second), float(burst_frames), now())
         self._sources: dict[str, _SourceState] = {}
         self._source_stats: dict[str, SourceStats] = source_stats if source_stats is not None else {}
+        self._vad_ingest = vad_ingest
+        self.vad_errors = 0
         self._window_started = now()
         self._invalid_in_window = 0
         self._rate_violations_in_window = 0
@@ -158,8 +162,27 @@ class AudioSession:
         self._counters.last_peak_dbfs = level
         if self._counters.peak_dbfs is None or level > self._counters.peak_dbfs:
             self._counters.peak_dbfs = level
-        self._counters.last_rms_dbfs = rms_dbfs(frame.payload)
+        frame_rms = rms_dbfs(frame.payload)
+        self._counters.last_rms_dbfs = frame_rms
         self._stats_for(frame.source).on_frame(frame)
+        if self._vad_ingest is not None:
+            try:
+                self._vad_ingest(
+                    VadFrame(
+                        source=frame.source,
+                        sequence=frame.sequence,
+                        capture_ts_ns=frame.capture_ts_ns,
+                        pcm16=frame.payload,
+                        sample_rate=frame.sample_rate,
+                        channels=frame.channels,
+                        frame_duration_ms=frame.frame_duration_ms,
+                        peak_dbfs=level,
+                        rms_dbfs=frame_rms,
+                    )
+                )
+            except Exception:
+                # VAD 入队失败不能影响音频接收。
+                self.vad_errors += 1
         self._sink.on_frame(frame)
         return FrameOutcome(True)
 

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -36,9 +37,14 @@ class _Segment:
 
 @dataclass
 class AsrStreamTracker:
-    """按 segment 维护 revision / 时间戳 / 定稿状态。"""
+    """按 segment 维护 revision / 时间戳 / 定稿状态。
+
+    已完成片段按 FIFO 淘汰，避免长期运行时无限增长。
+    """
 
     _segments: dict[str, _Segment] = field(default_factory=dict)
+    _finalized: deque[str] = field(default_factory=deque)
+    max_segments: int = 512
 
     def accept_partial(
         self,
@@ -87,6 +93,10 @@ class AsrStreamTracker:
         segment.revision = revision
         segment.start_ts_ns = start_ts_ns
         segment.end_ts_ns = end_ts_ns
+        self._finalized.append(segment_id)
+        while len(self._finalized) > self.max_segments:
+            expired = self._finalized.popleft()
+            self._segments.pop(expired, None)
         _ = text
 
     def is_finalized(self, segment_id: str) -> bool:

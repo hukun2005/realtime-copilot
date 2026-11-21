@@ -584,6 +584,49 @@ NAudio 是否暴露 process-loopback API、目标 PID 是否有效；子进程/�
 - 腾讯会议、微信 PC 的进程级 loopback 实机验证（NOT_VERIFIED）。
 - 干净工作区的 30 分钟稳定性报告未在本轮重跑；上一轮 30 分钟报告对应 `18613ee` 之前的代码。
 
+## 2026-11-21 · P3.1：实时 VAD 接线
+
+分支：`feature/p3-1-vad-runtime`（基线 `f31a86f`）。
+
+### VAD 运行时
+
+- `VadFrame` 保存完整帧（PCM、sequence、captureTsNs、采样率/声道、峰值/RMS）。
+- Ring Buffer 有界，默认 2 秒 pre-roll；覆盖最旧帧单独计 `ringBufferEvictions`。
+- 片段包含 pre-roll 与起始确认阶段的帧；结束时间取最后一帧有效语音，结束静音单独记录。
+- `maxSegmentMs` 超长切分；loopback/mic 各自独立状态。
+
+### Core 接线
+
+- `AsrPipeline`：每来源有界帧队列（默认 200）+ 有界 Segment 队列（默认 8）；
+  非阻塞 `ingest`；队列满计数 `framesDropped` / `segmentsDropped`；
+  VAD 异常计数但不断开采集；停止时 flush 剩余片段。
+- `AudioSession` 在帧被接受后把 PCM 交给 pipeline；VAD 入队异常不冒泡到 WebSocket。
+- `AudioHub` 暴露 `vad` 快照；app 在 lifespan 启动/停止 pipeline，并广播 `asr.status`（idle）。
+- `AsrStreamTracker` 已完成片段按 FIFO 淘汰（默认 512），避免无限增长。
+
+### 测试与 fixture
+
+- 新增 `tests/fixtures/vad-sample.wav`：合成 PCM（1s 静音 + 1s 440Hz + 0.5s 静音），
+  非真实会议音频。
+- 新增 15 个测试：纯静音、连续语音、短噪声、pre-roll、结束静音、停顿切分、超长切分、
+  双来源隔离、时间戳倒退、Ring Buffer 上限、ASR 队列满、stop flush、VAD 异常、
+  真实 PCM 片段一致性、已完成段缓存上限。
+
+### 实际执行
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **242 passed, 1 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed（本轮未改 C#） |
+| `pnpm -C packages/protocol test` | 26 passed |
+
+### 未完成
+
+- 真实 ASR Provider、`asr.partial/final` 的实际产出与广播（仅冻结协议与运行时队列）。
+- Silero VAD、ASR 延迟评测。
+- 真实会议音频 fixture（按要求不入库）。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -596,4 +639,6 @@ NAudio 是否暴露 process-loopback API、目标 PID 是否有效；子进程/�
 | 2026-11-20 | P2-C.1：控制面并发锁、会话代次、统一清理与迟到状态处理 |
 | 2026-11-21 | P2-C.2：锁外 spawn、会话任务绑定、disconnect 竞态与票据边界加固 |
 | 2026-11-21 | P3：ASR 协议冻结、票据 purpose、ASR 状态分离与能量 VAD |
+| 2026-11-21 | P3.1：完整 PCM Ring Buffer、VAD 运行时流水线与有界 ASR 队列 |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
+| 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |

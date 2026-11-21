@@ -16,8 +16,9 @@ from typing import Any
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import JSONResponse
 
-from copilot_protocol import PROTOCOL_VERSION
+from copilot_protocol import PROTOCOL_VERSION, make_asr_status
 
+from .asr import AsrStatusTracker
 from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
@@ -71,6 +72,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.audio.pipeline.start()
         database = open_database(config.database_path(data_dir))
         app.state.db = database
         app.state.started_at = time.monotonic()
@@ -94,6 +96,8 @@ def create_app(
             yield
         finally:
             await controller.shutdown()
+            await app.state.audio.pipeline.stop()
+            await broadcast(make_asr_status(state=app.state.asr.state.value, since=app.state.asr.since_ms))
             close(database)
             if runtime_path is not None:
                 remove_runtime_file(runtime_path)
@@ -111,6 +115,7 @@ def create_app(
     app.state.roles = {}
     app.state.port = 0
     app.state.audio = AudioHub(config.audio)
+    app.state.asr = AsrStatusTracker()
     app.state.capture = controller
 
     @app.get("/healthz")
