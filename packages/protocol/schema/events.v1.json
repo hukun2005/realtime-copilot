@@ -19,7 +19,12 @@
     "Role": {
       "title": "Role",
       "type": "string",
-      "enum": ["ui", "bridge", "audio", "tests"],
+      "enum": [
+        "ui",
+        "bridge",
+        "audio",
+        "tests"
+      ],
       "description": "连接角色。audio 只能发送音频与控制帧；ui/bridge/tests 只能收发事件。"
     },
     "ErrorCode": {
@@ -39,7 +44,11 @@
         "invalid_state",
         "capture_timeout",
         "sidecar_unavailable",
-        "ticket_invalid"
+        "ticket_invalid",
+        "asr_failed",
+        "asr_timeout",
+        "asr_unavailable",
+        "asr_segment_conflict"
       ],
       "description": "稳定的机器可路由错误码；客户端不得依赖 message 文本。"
     },
@@ -47,41 +56,99 @@
       "title": "HelloPayload",
       "type": "object",
       "additionalProperties": false,
-      "required": ["token", "role", "clientVersion"],
+      "required": [
+        "token",
+        "role",
+        "clientVersion"
+      ],
       "properties": {
-        "token": { "type": "string", "minLength": 16, "maxLength": 256 },
-        "role": { "$ref": "#/$defs/Role" },
-        "clientVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
-        "clientName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "ticket": { "type": ["string", "null"], "maxLength": 512 }
+        "token": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 256
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "clientVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "clientName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "ticket": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 512
+        }
       }
     },
     "SystemReadyPayload": {
       "title": "SystemReadyPayload",
       "type": "object",
       "additionalProperties": false,
-      "required": ["serverVersion", "protocol", "capabilities"],
+      "required": [
+        "serverVersion",
+        "protocol",
+        "capabilities"
+      ],
       "properties": {
-        "serverVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
-        "protocol": { "const": 1 },
+        "serverVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "protocol": {
+          "const": 1
+        },
         "capabilities": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$"
+          },
           "uniqueItems": true
         },
-        "sessionId": { "type": ["string", "null"], "maxLength": 64 }
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
       }
     },
     "SystemErrorPayload": {
       "title": "SystemErrorPayload",
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message", "retryable"],
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
       "properties": {
-        "code": { "$ref": "#/$defs/ErrorCode" },
-        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
-        "retryable": { "type": "boolean" },
-        "requestId": { "type": "string", "maxLength": 64 }
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "requestId": {
+          "type": "string",
+          "maxLength": 64
+        }
       }
     },
     "HeartbeatPayload": {
@@ -89,28 +156,80 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "nonce": { "type": "string", "minLength": 1, "maxLength": 64 }
+        "nonce": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
       }
     },
     "AudioStatusPayload": {
       "title": "AudioStatusPayload",
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "since"],
+      "required": [
+        "state",
+        "since"
+      ],
       "properties": {
         "state": {
           "type": "string",
-          "enum": ["idle", "starting", "capturing", "stopping", "error"]
+          "enum": [
+            "idle",
+            "starting",
+            "capturing",
+            "stopping",
+            "error"
+          ]
         },
         "source": {
-          "type": ["string", "null"],
-          "enum": ["loopback", "mic", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "loopback",
+            "mic",
+            null
+          ]
         },
-        "deviceId": { "type": ["string", "null"], "maxLength": 256 },
-        "mode": { "type": ["string", "null"], "enum": ["loopback", "mic", "process", null] },
-        "since": { "type": "integer", "minimum": 0 },
-        "error": { "type": ["string", "null"], "maxLength": 500 },
-        "errorCode": { "type": ["string", "null"], "maxLength": 64 }
+        "deviceId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "loopback",
+            "mic",
+            "process",
+            null
+          ]
+        },
+        "since": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
       }
     },
     "LoopbackOptions": {
@@ -118,28 +237,57 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "deviceId": { "type": ["string", "null"], "maxLength": 256 },
-        "processId": { "type": ["integer", "null"], "minimum": 1 }
+        "deviceId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "processId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
       }
     },
     "MicOptions": {
       "title": "MicOptions",
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "deviceId": { "type": ["string", "null"], "maxLength": 256 }
+        "enabled": {
+          "type": "boolean"
+        },
+        "deviceId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "CaptureStartPayload": {
       "title": "CaptureStartPayload",
       "type": "object",
       "additionalProperties": false,
-      "required": ["loopback", "mic"],
+      "required": [
+        "loopback",
+        "mic"
+      ],
       "properties": {
-        "loopback": { "$ref": "#/$defs/LoopbackOptions" },
-        "mic": { "$ref": "#/$defs/MicOptions" }
+        "loopback": {
+          "$ref": "#/$defs/LoopbackOptions"
+        },
+        "mic": {
+          "$ref": "#/$defs/MicOptions"
+        }
       }
     },
     "CaptureStopPayload": {
@@ -151,123 +299,657 @@
       "title": "HelloEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "hello" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/HelloPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "hello"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/HelloPayload"
+        }
       }
     },
     "SystemReadyEvent": {
       "title": "SystemReadyEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "system.ready" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/SystemReadyPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "system.ready"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/SystemReadyPayload"
+        }
       }
     },
     "SystemErrorEvent": {
       "title": "SystemErrorEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "system.error" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/SystemErrorPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "system.error"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/SystemErrorPayload"
+        }
       }
     },
     "PingEvent": {
       "title": "PingEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "ping" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/HeartbeatPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "ping"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/HeartbeatPayload"
+        }
       }
     },
     "PongEvent": {
       "title": "PongEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "pong" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/HeartbeatPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "pong"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/HeartbeatPayload"
+        }
       }
     },
     "AudioStatusEvent": {
       "title": "AudioStatusEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "audio.status" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/AudioStatusPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "audio.status"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AudioStatusPayload"
+        }
       }
     },
     "CaptureStartEvent": {
       "title": "CaptureStartEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "capture.start" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/CaptureStartPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "capture.start"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/CaptureStartPayload"
+        }
       }
     },
     "CaptureStopEvent": {
       "title": "CaptureStopEvent",
       "type": "object",
       "additionalProperties": false,
-      "required": ["v", "type", "eventId", "ts", "payload"],
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "type": { "const": "capture.stop" },
-        "eventId": { "$ref": "#/$defs/EventId" },
-        "requestId": { "$ref": "#/$defs/RequestId" },
-        "ts": { "type": "integer", "minimum": 0 },
-        "payload": { "$ref": "#/$defs/CaptureStopPayload" }
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "capture.stop"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/CaptureStopPayload"
+        }
+      }
+    },
+    "AsrSource": {
+      "title": "AsrSource",
+      "type": "string",
+      "enum": [
+        "loopback",
+        "mic"
+      ],
+      "description": "识别来源；与采集来源枚举保持一致，但独立演进。"
+    },
+    "AsrState": {
+      "title": "AsrState",
+      "type": "string",
+      "enum": [
+        "idle",
+        "connecting",
+        "ready",
+        "error"
+      ],
+      "description": "ASR 连接状态；与采集状态机完全独立。"
+    },
+    "AsrSegmentId": {
+      "title": "AsrSegmentId",
+      "type": "string",
+      "pattern": "^seg_[A-Za-z0-9_-]{1,64}$",
+      "description": "识别片段 ID；partial 与 final 共用同一 ID。"
+    },
+    "AsrStatusPayload": {
+      "title": "AsrStatusPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "since"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/AsrState"
+        },
+        "since": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "errorCode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000
+        }
+      }
+    },
+    "AsrPartialPayload": {
+      "title": "AsrPartialPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segmentId",
+        "source",
+        "startTsNs",
+        "endTsNs",
+        "revision",
+        "text"
+      ],
+      "properties": {
+        "segmentId": {
+          "$ref": "#/$defs/AsrSegmentId"
+        },
+        "source": {
+          "$ref": "#/$defs/AsrSource"
+        },
+        "startTsNs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "采集时间轴起点（纳秒）。"
+        },
+        "endTsNs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "采集时间轴终点（纳秒）。"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 16
+        }
+      }
+    },
+    "AsrFinalPayload": {
+      "title": "AsrFinalPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segmentId",
+        "source",
+        "startTsNs",
+        "endTsNs",
+        "revision",
+        "text"
+      ],
+      "properties": {
+        "segmentId": {
+          "$ref": "#/$defs/AsrSegmentId"
+        },
+        "source": {
+          "$ref": "#/$defs/AsrSource"
+        },
+        "startTsNs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "采集时间轴起点（纳秒）。"
+        },
+        "endTsNs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "采集时间轴终点（纳秒）。"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 16
+        }
+      }
+    },
+    "AsrErrorPayload": {
+      "title": "AsrErrorPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "segmentId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AsrSegmentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AsrStatusEvent": {
+      "title": "AsrStatusEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "asr.status"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AsrStatusPayload"
+        }
+      }
+    },
+    "AsrPartialEvent": {
+      "title": "AsrPartialEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "asr.partial"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AsrPartialPayload"
+        }
+      }
+    },
+    "AsrFinalEvent": {
+      "title": "AsrFinalEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "asr.final"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AsrFinalPayload"
+        }
+      }
+    },
+    "AsrErrorEvent": {
+      "title": "AsrErrorEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "asr.error"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AsrErrorPayload"
+        }
       }
     }
   },
   "oneOf": [
-    { "$ref": "#/$defs/HelloEvent" },
-    { "$ref": "#/$defs/SystemReadyEvent" },
-    { "$ref": "#/$defs/SystemErrorEvent" },
-    { "$ref": "#/$defs/PingEvent" },
-    { "$ref": "#/$defs/PongEvent" },
-    { "$ref": "#/$defs/AudioStatusEvent" },
-    { "$ref": "#/$defs/CaptureStartEvent" },
-    { "$ref": "#/$defs/CaptureStopEvent" }
+    {
+      "$ref": "#/$defs/HelloEvent"
+    },
+    {
+      "$ref": "#/$defs/SystemReadyEvent"
+    },
+    {
+      "$ref": "#/$defs/SystemErrorEvent"
+    },
+    {
+      "$ref": "#/$defs/PingEvent"
+    },
+    {
+      "$ref": "#/$defs/PongEvent"
+    },
+    {
+      "$ref": "#/$defs/AudioStatusEvent"
+    },
+    {
+      "$ref": "#/$defs/CaptureStartEvent"
+    },
+    {
+      "$ref": "#/$defs/CaptureStopEvent"
+    },
+    {
+      "$ref": "#/$defs/AsrStatusEvent"
+    },
+    {
+      "$ref": "#/$defs/AsrPartialEvent"
+    },
+    {
+      "$ref": "#/$defs/AsrFinalEvent"
+    },
+    {
+      "$ref": "#/$defs/AsrErrorEvent"
+    }
   ]
 }

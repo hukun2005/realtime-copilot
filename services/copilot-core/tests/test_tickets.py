@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 
 import pytest
 from copilot_core.tickets import MAX_TICKET_LENGTH, TicketIssuer, TicketRejection
@@ -187,3 +188,60 @@ def test_rejection_does_not_expose_signature_or_secret() -> None:
     assert check.reason is TicketRejection.BAD_SIGNATURE
     assert signature not in repr(check)
     assert issuer._secret.hex() not in repr(check)
+
+
+def test_audio_ticket_cannot_be_used_for_asr() -> None:
+    issuer, _ = make_issuer()
+    audio_ticket = issuer.issue()
+
+    check = issuer.consume(audio_ticket, purpose="asr", generation=1)
+    assert not check.ok
+    assert check.reason is TicketRejection.WRONG_PURPOSE
+
+
+def test_asr_ticket_requires_matching_generation() -> None:
+    issuer, _ = make_issuer()
+    ticket = issuer.issue("asr", generation=3)
+
+    assert issuer.consume(ticket, purpose="asr", generation=3).ok
+
+    second = issuer.issue("asr", generation=3)
+    assert issuer.consume(second, purpose="asr", generation=4).reason is TicketRejection.WRONG_GENERATION
+
+
+def test_asr_ticket_requires_generation_argument() -> None:
+    issuer, _ = make_issuer()
+    ticket = issuer.issue("asr", generation=1)
+
+    check = issuer.consume(ticket, purpose="asr")
+    assert not check.ok
+    assert check.reason is TicketRejection.WRONG_GENERATION
+
+
+def test_asr_ticket_expiry_replay_and_session_revocation() -> None:
+    clock = FakeClock()
+    issuer = TicketIssuer(ttl_seconds=10, now=clock)  # type: ignore[arg-type]
+    issuer.begin_session()
+
+    expired = issuer.issue("asr", generation=1)
+    clock.advance(10)
+    assert issuer.consume(expired, purpose="asr", generation=1).reason is TicketRejection.EXPIRED
+
+    replay = issuer.issue("asr", generation=1)
+    assert issuer.consume(replay, purpose="asr", generation=1).ok
+    assert issuer.consume(replay, purpose="asr", generation=1).reason is TicketRejection.REPLAYED
+
+    revoked = issuer.issue("asr", generation=1)
+    issuer.end_session()
+    assert issuer.consume(revoked, purpose="asr", generation=1).reason is TicketRejection.WRONG_SESSION
+
+
+def test_ticket_payload_has_no_credentials() -> None:
+    issuer, _ = make_issuer()
+    body = issuer.issue("asr", generation=2).split(".", 1)[0]
+    padded = body + "=" * (-len(body) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(padded))
+
+    assert set(payload) <= {"p", "n", "s", "e", "g"}
+    assert payload["p"] == "asr"
+    assert payload["g"] == 2

@@ -57,6 +57,10 @@ class ErrorCode(
             'capture_timeout',
             'sidecar_unavailable',
             'ticket_invalid',
+            'asr_failed',
+            'asr_timeout',
+            'asr_unavailable',
+            'asr_segment_conflict',
         ]
     ]
 ):
@@ -76,6 +80,10 @@ class ErrorCode(
             'capture_timeout',
             'sidecar_unavailable',
             'ticket_invalid',
+            'asr_failed',
+            'asr_timeout',
+            'asr_unavailable',
+            'asr_segment_conflict',
         ],
         Field(
             description='稳定的机器可路由错误码；客户端不得依赖 message 文本。',
@@ -288,6 +296,149 @@ class CaptureStopEvent(BaseModel):
     payload: CaptureStopPayload
 
 
+class AsrSource(RootModel[Literal['loopback', 'mic']]):
+    root: Annotated[
+        Literal['loopback', 'mic'],
+        Field(
+            description='识别来源；与采集来源枚举保持一致，但独立演进。',
+            title='AsrSource',
+        ),
+    ]
+
+
+class AsrState(RootModel[Literal['idle', 'connecting', 'ready', 'error']]):
+    root: Annotated[
+        Literal['idle', 'connecting', 'ready', 'error'],
+        Field(description='ASR 连接状态；与采集状态机完全独立。', title='AsrState'),
+    ]
+
+
+class AsrSegmentId(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(
+            description='识别片段 ID；partial 与 final 共用同一 ID。',
+            pattern='^seg_[A-Za-z0-9_-]{1,64}$',
+            title='AsrSegmentId',
+        ),
+    ]
+
+
+class AsrStatusPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    state: AsrState
+    since: Annotated[int, Field(ge=0)]
+    provider: Annotated[str | None, Field(max_length=64)] = None
+    error_code: Annotated[ErrorCode | None, Field(alias='errorCode')] = None
+    error: Annotated[str | None, Field(max_length=1000)] = None
+
+
+class AsrPartialPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    segment_id: Annotated[AsrSegmentId, Field(alias='segmentId')]
+    source: AsrSource
+    start_ts_ns: Annotated[
+        int, Field(alias='startTsNs', description='采集时间轴起点（纳秒）。', ge=0)
+    ]
+    end_ts_ns: Annotated[
+        int, Field(alias='endTsNs', description='采集时间轴终点（纳秒）。', ge=0)
+    ]
+    revision: Annotated[int, Field(ge=0)]
+    text: Annotated[str, Field(max_length=4000)]
+    confidence: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    provider: Annotated[str | None, Field(max_length=64)] = None
+    language: Annotated[str | None, Field(max_length=16)] = None
+
+
+class AsrFinalPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    segment_id: Annotated[AsrSegmentId, Field(alias='segmentId')]
+    source: AsrSource
+    start_ts_ns: Annotated[
+        int, Field(alias='startTsNs', description='采集时间轴起点（纳秒）。', ge=0)
+    ]
+    end_ts_ns: Annotated[
+        int, Field(alias='endTsNs', description='采集时间轴终点（纳秒）。', ge=0)
+    ]
+    revision: Annotated[int, Field(ge=0)]
+    text: Annotated[str, Field(max_length=4000)]
+    confidence: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    provider: Annotated[str | None, Field(max_length=64)] = None
+    language: Annotated[str | None, Field(max_length=16)] = None
+
+
+class AsrErrorPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    code: ErrorCode
+    message: Annotated[str, Field(max_length=1000)]
+    segment_id: Annotated[AsrSegmentId | None, Field(alias='segmentId')] = None
+    retryable: bool
+
+
+class AsrStatusEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['asr.status']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: AsrStatusPayload
+
+
+class AsrPartialEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['asr.partial']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: AsrPartialPayload
+
+
+class AsrFinalEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['asr.final']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: AsrFinalPayload
+
+
+class AsrErrorEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['asr.error']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: AsrErrorPayload
+
+
 class EventV1(
     RootModel[
         HelloEvent
@@ -298,6 +449,10 @@ class EventV1(
         | AudioStatusEvent
         | CaptureStartEvent
         | CaptureStopEvent
+        | AsrStatusEvent
+        | AsrPartialEvent
+        | AsrFinalEvent
+        | AsrErrorEvent
     ]
 ):
     root: Annotated[
@@ -308,7 +463,11 @@ class EventV1(
         | PongEvent
         | AudioStatusEvent
         | CaptureStartEvent
-        | CaptureStopEvent,
+        | CaptureStopEvent
+        | AsrStatusEvent
+        | AsrPartialEvent
+        | AsrFinalEvent
+        | AsrErrorEvent,
         Field(
             description='RealTime Copilot 有线协议 v1。JSON Schema 是唯一事实来源；TypeScript 类型与 Python Pydantic 模型由 scripts/generate.mjs 生成，C# DTO 手写并由 fixtures 往返测试约束。所有事件共用同一 envelope：v/type/eventId/requestId/ts/payload。',
             title='EventV1',

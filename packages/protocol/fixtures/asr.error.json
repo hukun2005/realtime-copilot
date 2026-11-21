@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "type": "asr.error",
+  "eventId": "evt_01JAY0000000000000000000K",
+  "ts": 1763700003000,
+  "payload": {
+    "code": "asr_unavailable",
+    "message": "ASR 服务暂不可用",
+    "segmentId": "seg_01JAY00000000000000000001",
+    "retryable": true
+  }
+}

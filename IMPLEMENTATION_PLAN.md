@@ -213,11 +213,29 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 - [ ] 腾讯会议/微信/浏览器三场景实机记录。
 - [ ] 30 分钟测试的结论需要按目标机器复测（本机为 Windows 11 26300 + Senary 虚拟声卡）。
 
-## Phase 2-D — 进程级 loopback（按进程采集）
+## Phase 2-D — 进程级 loopback（可选增强）
 
 **状态**：未开始。
 
 ## Phase 3 — 流式 ASR
+
+**状态**：协议与接口准备完成（P3-A/B/C/D）；识别引擎未接入。
+
+**已完成**
+
+| 项 | 内容 |
+|---|---|
+| P3-A 协议冻结 | `asr.status` / `asr.partial` / `asr.final` / `asr.error` schema、fixtures、TS 与 Pydantic 生成 |
+| P3-B 状态分离 | `AsrStatusTracker` 独立于采集状态机；ASR error 不改变 capture 状态（有测试） |
+| P3-C 票据 | `TicketIssuer.issue(purpose, generation)`；audio/asr 隔离、一次性、过期、旧会话拒绝 |
+| P3-D VAD | `EnergyVad` + `Segmenter`：per-source 状态、有界 Ring Buffer、speech_started/ongoing/ended |
+
+**未完成**
+
+- 真实 ASR provider（DeepSeek / 云厂商 / sherpa-onnx）与转写装配。
+- `SileroVad`、`VadProvider` 协议外的模型加载。
+- `asr.status` 的实际广播与 UI 接线（当前只有 tracker 与事件构造函数）。
+- 延迟埋点与 `tools/asr_eval.py`。
 
 **目标**：把语音段稳定转成文本，partial 可见、final 可定稿，并测量"段尾 → final"的延迟分布。
 

@@ -448,6 +448,46 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 - 票据仍不证明 Windows 进程身份；进程级 loopback、按来源统计、静音事件仍未实现。
 - C# sidecar 未改动。
 
+## 2026-11-21 · P3：ASR 协议与接口准备
+
+分支：`feature/p3-asr-contract`（基线 `71a2a17`）。
+
+### 协议（P3-A）
+
+- 新增 `asr.status`、`asr.partial`、`asr.final`、`asr.error` 四个事件与对应 payload；
+  `AsrSource`（loopback/mic）、`AsrState`、`AsrSegmentId` 独立定义，不改动音频二进制协议 v1。
+- 四个合法 fixtures + 生成 TS 类型与 Pydantic 模型；`EVENT_TYPES` 从 8 增至 12。
+- 错误码新增 `asr_failed` / `asr_timeout` / `asr_unavailable` / `asr_segment_conflict`。
+- Python 侧新增 `make_asr_status` / `make_asr_result` / `make_asr_error` 构造函数。
+
+### 状态与票据（P3-B/C）
+
+- `AsrStatusTracker`：idle/connecting/ready/error，与采集状态机完全独立；ASR error 不影响采集。
+- `TicketIssuer.issue(purpose="audio", generation=None)` / `consume(..., purpose, generation)`：
+  audio 与 asr 票据隔离；asr 票据必须绑定 generation；过期、重放、旧会话、结束会话均拒绝；
+  payload 仅含 `p/n/s/e/g`，不含任何 API Key。
+
+### VAD（P3-D）
+
+- `EnergyVad`（阈值判定）与 `Segmenter`（per-source 状态、有界 Ring Buffer、丢弃计数）。
+- 事件：`speech_started` / `speech_ongoing` / `speech_ended`；loopback 与 mic 状态互不影响。
+- 不缓存无上限音频：`ring_max_frames` 固定，超出即丢弃最旧帧并计数。
+
+### 实际执行与结果
+
+| 命令 | 结果 |
+|---|---|
+| `uv run ruff check .` | All checks passed |
+| `uv run pytest -q` | **229 passed, 1 skipped**（新增 30：ASR 17、票据 5、协议 fixture 等） |
+| `pnpm -C packages/protocol test` | 26 passed（fixtures 与事件类型扩展） |
+| `pnpm -C packages/protocol typecheck` | 通过 |
+| `uv run pytest packages/protocol/python/tests -q` | 35 passed |
+
+### 未完成
+
+- 真实 ASR provider、转写装配、`asr.status` 广播与 UI 接线、延迟评测、Silero VAD 均未实现。
+- 本轮只冻结协议与接口，不宣称任何识别能力可用。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -459,3 +499,4 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
 | 2026-11-20 | Phase 2-C：采集控制面、短期票据、三态冒烟、诊断与 30 分钟稳定性 |
 | 2026-11-20 | P2-C.1：控制面并发锁、会话代次、统一清理与迟到状态处理 |
 | 2026-11-21 | P2-C.2：锁外 spawn、会话任务绑定、disconnect 竞态与票据边界加固 |
+| 2026-11-21 | P3：ASR 协议冻结、票据 purpose、ASR 状态分离与能量 VAD |

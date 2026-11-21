@@ -181,6 +181,18 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 **CI 限制**：托管 Windows runner 没有音频端点，控制面 E2E 在 CI 用 -Simulated（sidecar 用静音帧源）
 验证真实的跨进程控制与二进制帧链路；真实 WASAPI 采集的 E2E 只能在本机运行，结果记录在 BUILD_LOG.md。
 
+## 5A. ASR 协议与接口准备（P3-A/B/C/D）
+
+| 类别 | 断言 |
+|---|---|
+| Schema/fixtures | `asr.status` / `asr.partial` / `asr.final` / `asr.error` 的合法 fixture 通过 `parse_event`；Python 与 TS 生成类型同步 |
+| 流式约束 | partial revision 必须递增；final 后拒绝同段 partial/final；final revision 不早于最近 partial；时间戳倒退与 start>end 拒绝 |
+| 状态分离 | `AsrStatusTracker` 进入 error 时采集状态仍为 CAPTURING、采集错误码为空 |
+| 票据用途 | audio 票据不能当 asr 用；asr 票据必须带 generation；过期/重放/旧会话/结束会话拒绝；payload 不含密钥 |
+| VAD | 能量阈值、speech_started/ongoing/ended、最短语音、Ring Buffer 上限与丢弃计数、loopback/mic 独立、时间戳单调 |
+
+说明：本轮不包含真实 ASR provider、转写装配与延迟评测。
+
 ## 6. 安全测试
 
 | 编号 | 断言 | 方式 |
