@@ -20,6 +20,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | WASAPI loopback / mic 采集、二进制帧 v1 | 已实现 |
 | 设备恢复、稳定性报告 | 已实现；真实热插拔 **NOT_VERIFIED** |
 | VAD（Energy VAD + 完整 PCM 片段） | 已实现；真实噪声评测 **NOT_VERIFIED** |
+| 阿里云 Paraformer 实时 ASR | 已接入；真实 API **PASS**（TTS 测试音频，非会议） |
 | Deepgram Provider（Segment 级） | 代码已实现；真实连接 **NOT_VERIFIED**（无 API Key） |
 | ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
 | 持续实时流式 ASR | **尚未实现**（P3.3） |

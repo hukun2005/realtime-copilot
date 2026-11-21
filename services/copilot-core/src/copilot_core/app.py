@@ -118,6 +118,11 @@ def create_app(
             provider_config = AsrProviderConfig(
                 name=provider_name,
                 language=os.environ.get("RTC_ASR_LANGUAGE", "zh-CN"),
+                model=os.environ.get("RTC_ASR_MODEL") or None,
+                workspace_id=(
+                    os.environ.get("DASHSCOPE_WORKSPACE_ID")
+                    or os.environ.get("RTC_ASR_WORKSPACE_ID")
+                ),
             )
             asr_coordinator = AsrCoordinator(
                 pipeline=app.state.audio.pipeline,

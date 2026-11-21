@@ -66,6 +66,7 @@ class AsrProviderConfig:
     max_concurrent_connections: int = 2
     max_retries: int = 2
     backoff_base_seconds: float = 0.2
+    workspace_id: str | None = None
 
 
 class AsrProvider(Protocol):

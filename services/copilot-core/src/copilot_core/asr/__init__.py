@@ -1,5 +1,6 @@
 """ASR 接入模块：协议约束、状态、VAD、Provider 与运行时。"""
 
+from .aliyun import DashScopeParaformerProvider
 from .coordinator import AsrCoordinator
 from .deepgram import DeepgramProvider
 from .manager import AsrManager
@@ -18,6 +19,7 @@ from .stream import AsrStreamError, AsrStreamTracker, AsrViolation
 from .vad import EnergyVad, Segmenter, SpeechSegment, VadEvent, VadEventKind, VadFrame
 from .vad_provider import EnergyVadProvider, VadProvider, VadUnavailable, WebRtcVadProvider
 
+AsrRegistry.register("aliyun", DashScopeParaformerProvider)
 AsrRegistry.register("deepgram", DeepgramProvider)
 
 __all__ = [
@@ -35,6 +37,7 @@ __all__ = [
     "AsrStreamTracker",
     "AsrUnavailable",
     "AsrViolation",
+    "DashScopeParaformerProvider",
     "DeepgramProvider",
     "EnergyVad",
     "EnergyVadProvider",
