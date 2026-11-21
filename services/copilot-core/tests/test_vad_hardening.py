@@ -161,9 +161,15 @@ async def test_consuming_segment_releases_pcm_budget() -> None:
         assert segment is not None
         await asyncio.sleep(0.02)
         snapshot = pipeline.snapshot()
-        assert snapshot["pcmBytesInFlight"] == 0
+        # 取出后进入 processing，预算尚未释放。
+        assert snapshot["pcmBytesProcessing"] >= len(segment.pcm16)  # type: ignore[attr-defined]
+        assert snapshot["pcmBytesInFlight"] >= len(segment.pcm16)  # type: ignore[attr-defined]
+
+        pipeline.release_segment(segment)  # type: ignore[arg-type]
+        pipeline.release_segment(segment)  # type: ignore[arg-type] - 重复释放幂等
+        snapshot = pipeline.snapshot()
+        assert snapshot["pcmBytesProcessing"] == 0
         assert snapshot["pcmBytesReleased"] >= len(segment.pcm16)  # type: ignore[attr-defined]
-        assert snapshot["peakPcmBytesInFlight"] >= len(segment.pcm16)  # type: ignore[attr-defined]
     finally:
         await pipeline.close()
 
@@ -206,3 +212,44 @@ async def test_close_is_idempotent_and_blocks_restart() -> None:
     await pipeline.close()
     with pytest.raises(RuntimeError):
         pipeline.start()
+
+
+async def test_processing_pcm_is_counted_separately() -> None:
+    pipeline = AsrPipeline()
+    pipeline.start()
+    try:
+        for index in range(10):
+            pipeline.ingest(frame("loopback", index, index * 20, 8000))
+        for index in range(10, 30):
+            pipeline.ingest(frame("loopback", index, index * 20, 0))
+        segment = await _wait_segment(pipeline, "loopback")
+        assert segment is not None
+        snapshot = pipeline.snapshot()
+        assert snapshot["pcmBytesQueued"] == 0
+        assert snapshot["pcmBytesProcessing"] == len(segment.pcm16)  # type: ignore[attr-defined]
+        assert snapshot["pcmBytesInFlight"] == len(segment.pcm16)  # type: ignore[attr-defined]
+    finally:
+        await pipeline.close()
+
+
+async def test_two_sources_processing_pcm_sums() -> None:
+    pipeline = AsrPipeline()
+    pipeline.start()
+    try:
+        for index in range(10):
+            pipeline.ingest(frame("loopback", index, index * 20, 8000))
+            pipeline.ingest(frame("mic", index, index * 20, 8000))
+        for index in range(10, 30):
+            pipeline.ingest(frame("loopback", index, index * 20, 0))
+            pipeline.ingest(frame("mic", index, index * 20, 0))
+
+        left = await _wait_segment(pipeline, "loopback")
+        right = await _wait_segment(pipeline, "mic")
+        assert left is not None and right is not None
+        total = len(left.pcm16) + len(right.pcm16)  # type: ignore[attr-defined]
+        assert pipeline.snapshot()["pcmBytesProcessing"] == total
+        pipeline.release_segment(left)  # type: ignore[arg-type]
+        pipeline.release_segment(right)  # type: ignore[arg-type]
+        assert pipeline.snapshot()["pcmBytesInFlight"] == 0
+    finally:
+        await pipeline.close()

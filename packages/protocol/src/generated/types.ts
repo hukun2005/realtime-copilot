@@ -57,6 +57,12 @@ export type ErrorCode =
   | 'asr_segment_conflict'
   | 'asr_auth_failed'
   | 'stale_session'
+  | 'asr_auth_missing'
+  | 'asr_rate_limited'
+  | 'asr_connection_lost'
+  | 'asr_invalid_audio'
+  | 'asr_provider_error'
+  | 'asr_stale_generation'
 /**
  * ASR 连接状态；与采集状态机完全独立。
  */

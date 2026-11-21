@@ -63,6 +63,12 @@ class ErrorCode(
             'asr_segment_conflict',
             'asr_auth_failed',
             'stale_session',
+            'asr_auth_missing',
+            'asr_rate_limited',
+            'asr_connection_lost',
+            'asr_invalid_audio',
+            'asr_provider_error',
+            'asr_stale_generation',
         ]
     ]
 ):
@@ -88,6 +94,12 @@ class ErrorCode(
             'asr_segment_conflict',
             'asr_auth_failed',
             'stale_session',
+            'asr_auth_missing',
+            'asr_rate_limited',
+            'asr_connection_lost',
+            'asr_invalid_audio',
+            'asr_provider_error',
+            'asr_stale_generation',
         ],
         Field(
             description='稳定的机器可路由错误码；客户端不得依赖 message 文本。',
