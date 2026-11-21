@@ -956,7 +956,37 @@ capture.stop()
 - 30 分钟/60 分钟真实 WASAPI 联合测试：**NOT_RUN**。
 - 真实会议音频、WER、P95 延迟：未测。
 
+## 2026-11-21 · P3.2.6：30 分钟真实 WASAPI + Paraformer 结果
+
+执行：`scripts/asr-soak-wasapi.ps1 -Minutes 30 -Interval 30`
+
+| 项 | 值 |
+|---|---|
+| 结果 | **PASS** |
+| Git SHA | `7e1f8a66f3f9f5af6b97aa7a039ee8de6e135df5` |
+| 工作区 | 干净（`gitDirty=false`） |
+| Windows Build | 10.0.26300 |
+| 模型 | `paraformer-realtime-v2` |
+| 音频 | 真实 WASAPI loopback（系统播放 TTS 语音，非会议录音） |
+| 帧数 | 88,544（约 49.2 fps，理论 90,000，98.4%） |
+| 丢帧 / 重复 / 非法 | 0 / 0 / 0 |
+| VAD Segment | 513（丢弃 0） |
+| ASR Partial / Final | 4,546 / 513 |
+| ASR 错误 | 0 |
+| ASR 状态 | ready |
+| 连接尝试 / 失败 | 514 / 0 |
+| PCM 峰值 in-flight | 350,080 bytes（≈342 KiB，预算 32 MiB） |
+| 进程内存 | WorkingSet 65,515,520 B；PrivateBytes 45,936,640 B；Peak WS 67,026,944 B |
+
+### 限制
+
+- 音频是 Windows 中文 TTS 循环播放，不是真实会议；未测 WER。
+- 未采集逐 Segment 的 P50/P95 识别延迟（只有连接耗时聚合与 partial/final 计数）。
+- 仅 loopback 单来源；mic 双来源并行未跑。
+- 60 分钟测试未执行。
+
 ### 变更记录
+
 
 
 
@@ -980,6 +1010,7 @@ capture.stop()
 | 2026-11-21 | P3.2.2：Deepgram 参数核对、真实 API 自检脚本（本机 SKIP）与文档状态统一 |
 | 2026-11-21 | P3.2.3：生命周期竞态、Deepgram READY/Drain/重试、进程内存观测 |
 | 2026-11-21 | P3.2.4：阿里云 Paraformer 实时 ASR Provider，真实 API PASS |
-| 2026-11-21 | P3.2.5：WASAPI soak 脚本；30 分钟尝试因 sidecar 首帧后退出而未通过 |
+| 2026-11-21 | P3.2.5：WASAPI soak 脚本；根因是测试脚本 Minutes 取整，已修正 |
+| 2026-11-21 | P3.2.6：30 分钟真实 WASAPI + Paraformer PASS（88,544 帧 / 513 段 / 0 错误） |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
