@@ -65,7 +65,7 @@ async def wait_for(ws: Any, predicate, *, deadline_seconds: float) -> dict[str, 
     raise TimeoutError("condition not met")
 
 
-async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[str, Any]:
+async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: bool) -> dict[str, Any]:
     port = int(runtime["port"])
     token = runtime["token"]
     ws_url = f"ws://127.0.0.1:{port}/ws/v1/events"
@@ -80,7 +80,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[
         await ws.send(
             _envelope(
                 "capture.start",
-                {"loopback": {"deviceId": None, "processId": None}, "mic": {"enabled": False}},
+                {"loopback": {"deviceId": None, "processId": None}, "mic": {"enabled": mic}},
                 request_id,
             )
         )
@@ -145,7 +145,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[
 
     return {
         "result": "PASS" if frames and frames[-1] > 0 and asr_last.get("finals", 0) > 0 else "FAIL",
-        "mode": "real-wasapi-loopback + aliyun-paraformer",
+        "mode": "real-wasapi" + ("-loopback+mic" if mic else "-loopback") + " + aliyun-paraformer",
         "minutes": minutes,
         "gitSha": sha,
         "gitDirty": dirty,
@@ -160,7 +160,13 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[
         "asrPartials": asr_last.get("partials"),
         "asrFinals": asr_last.get("finals"),
         "asrErrors": asr_last.get("errors"),
+        "asrBySource": asr_last.get("bySource"),
         "asrState": asr_last.get("state"),
+        "finalP50Ms": metrics.get("finalP50Ms"),
+        "finalP95Ms": metrics.get("finalP95Ms"),
+        "firstPartialP50Ms": metrics.get("firstPartialP50Ms"),
+        "firstPartialP95Ms": metrics.get("firstPartialP95Ms"),
+        "latencySamples": metrics.get("latencySamples"),
         "connectionAttempts": metrics.get("connection_attempts"),
         "connectionFailures": metrics.get("connection_failures"),
         "pcmPeakBytes": vad_last.get("peakPcmBytesInFlight"),
@@ -174,11 +180,12 @@ def main() -> int:
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--minutes", type=float, default=30.0)
     parser.add_argument("--interval", type=float, default=30.0)
+    parser.add_argument("--mic", action="store_true")
     parser.add_argument("--output", type=Path, default=Path("artifacts/asr-soak/wasapi-soak.json"))
     args = parser.parse_args()
 
     runtime = json.loads(args.runtime.read_text(encoding="utf-8"))
-    report = asyncio.run(run(runtime, args.minutes, args.interval))
+    report = asyncio.run(run(runtime, args.minutes, args.interval, args.mic))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     summary = {key: report[key] for key in report if key != "samples"}

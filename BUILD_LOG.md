@@ -985,7 +985,15 @@ capture.stop()
 - 仅 loopback 单来源；mic 双来源并行未跑。
 - 60 分钟测试未执行。
 
+## 2026-11-21 · P3.2.7：ASR 延迟分位与双来源
+
+- Aliyun Provider 记录每 Segment 的首次 partial 与 final 延迟，输出 P50/P95（`latencySamples` 上限 5000）。
+- `AsrManager` 快照增加 `bySource`（loopback/mic 各自的 partial/final 计数）。
+- soak 脚本支持 `-Mic`：`capture.start` 的 `mic.enabled=true`，报告双来源帧数与 ASR 计数。
+- 1 分钟双来源冒烟：loopback 14 final / mic 1 final，0 错误；final P50 1264.9ms / P95 1413.1ms。
+
 ### 变更记录
+
 
 
 
