@@ -76,12 +76,17 @@ class CaptureController:
         logger: Any,
         broadcast: Callable[[Any], Awaitable[None]],
         source_stats: Callable[[], dict[str, Any]] | None = None,
+        on_capture_start: Callable[[int], Awaitable[None]] | None = None,
+        on_capture_stop: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._tickets = tickets
         self._logger = logger
         self._broadcast = broadcast
         self._source_stats = source_stats
+        self._on_capture_start = on_capture_start
+        self._on_capture_stop = on_capture_stop
+        self._asr_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._machine = CaptureStateMachine()
         self._session: _Session | None = None
@@ -178,6 +183,7 @@ class CaptureController:
         self._logger.info(
             "capture starting: pid=%s generation=%s", process.pid, session.generation
         )
+        self._notify_asr_start(session.generation)
         await self._emit([status])
 
     async def stop(self, event: Any) -> None:
@@ -480,6 +486,7 @@ class CaptureController:
             emit.append(self._status_event())
 
         await self._terminate(session)
+        self._notify_asr_stop()
         await self._emit(emit)
 
     async def _fail_and_cleanup(self, session: _Session, code: str, message: str) -> None:
@@ -497,6 +504,7 @@ class CaptureController:
             emit.append(self._status_event())
 
         self._logger.warning("capture failed: %s (%s)", code, message)
+        self._notify_asr_stop()
         await self._terminate(session)
         await self._emit(emit)
 
@@ -533,6 +541,28 @@ class CaptureController:
             except ProcessLookupError:
                 return
             await process.wait()
+
+    def _notify_asr_start(self, generation: int) -> None:
+        if self._on_capture_start is None:
+            return
+        self._asr_task = asyncio.create_task(self._run_asr_start(generation))
+
+    def _notify_asr_stop(self) -> None:
+        if self._on_capture_stop is None:
+            return
+        self._asr_task = asyncio.create_task(self._run_asr_stop())
+
+    async def _run_asr_start(self, generation: int) -> None:
+        try:
+            await self._on_capture_start(generation)  # type: ignore[misc]
+        except Exception:
+            self._logger.exception("asr start callback failed; capture continues")
+
+    async def _run_asr_stop(self) -> None:
+        try:
+            await self._on_capture_stop()  # type: ignore[misc]
+        except Exception:
+            self._logger.exception("asr stop callback failed; capture continues")
 
     def _reset_to_idle_locked(self) -> None:
         self._machine.transition(CaptureState.IDLE)

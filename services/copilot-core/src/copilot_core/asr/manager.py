@@ -82,7 +82,7 @@ class AsrManager:
                 self._current_generation is not None
                 and self._current_generation() != self._generation
             ):
-                raise AsrError("stale_session", "capture session has moved on")
+                raise AsrError("asr_stale_generation", "capture session has moved on")
             ticket = self._tickets.issue("asr", generation=self._generation)
             check = self._tickets.consume(ticket, purpose="asr", generation=self._generation)
             if not check.ok:
@@ -157,14 +157,30 @@ class AsrManager:
         except TimeoutError:
             await self._publish_error("asr_timeout", "asr transcription timed out", segment.segment_id)
         except AsrError as error:
-            await self._publish_error(error.code, str(error), segment.segment_id, error.retryable)
+            if self._active:
+                await self._publish_error(error.code, str(error), segment.segment_id, error.retryable)
         except Exception as error:
-            await self._publish_error("asr_failed", str(error), segment.segment_id)
+            if self._active:
+                await self._publish_error("asr_provider_error", str(error), segment.segment_id)
+        finally:
+            release = getattr(self._pipeline, "release_segment", None)
+            if release is not None:
+                release(segment)
 
     async def _accept(self, result: AsrResult, segment: SpeechSegment) -> None:
-        if result.segment_id != segment.segment_id:
+        if not self._active:
+            return
+        if (
+            self._current_generation is not None
+            and self._current_generation() != self._generation
+        ):
             await self._publish_error(
-                "asr_failed", "provider returned a mismatched segment", segment.segment_id
+                "asr_stale_generation", "result belongs to an older session", segment.segment_id
+            )
+            return
+        if result.segment_id != segment.segment_id or result.source != segment.source:
+            await self._publish_error(
+                "asr_provider_error", "provider returned a mismatched segment", segment.segment_id
             )
             return
 

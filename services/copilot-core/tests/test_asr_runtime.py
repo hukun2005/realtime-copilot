@@ -197,7 +197,7 @@ async def test_stale_generation_is_rejected() -> None:
 
     assert not await manager.start()
     assert manager.state is AsrState.ERROR
-    assert manager.snapshot()["errorCode"] == "stale_session"
+    assert manager.snapshot()["errorCode"] == "asr_stale_generation"
     assert not provider.connected
 
 

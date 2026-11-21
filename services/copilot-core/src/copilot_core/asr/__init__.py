@@ -1,5 +1,6 @@
 """ASR 接入模块：协议约束、状态、VAD、Provider 与运行时。"""
 
+from .coordinator import AsrCoordinator
 from .deepgram import DeepgramProvider
 from .manager import AsrManager
 from .provider import (
@@ -21,6 +22,7 @@ AsrRegistry.register("deepgram", DeepgramProvider)
 
 __all__ = [
     "AsrAuthError",
+    "AsrCoordinator",
     "AsrError",
     "AsrManager",
     "AsrProvider",

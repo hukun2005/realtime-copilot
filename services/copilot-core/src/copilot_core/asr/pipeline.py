@@ -30,6 +30,8 @@ class PipelineStats:
     segments_dropped: int = 0
     vad_errors: int = 0
     worker_errors: int = 0
+    pcm_bytes_queued: int = 0
+    pcm_bytes_processing: int = 0
     pcm_bytes_in_flight: int = 0
     peak_pcm_bytes_in_flight: int = 0
     pcm_bytes_dropped: int = 0
@@ -66,6 +68,7 @@ class AsrPipeline:
         self._segment_queues: dict[str, asyncio.Queue[SpeechSegment]] = {}
         self._tasks: list[asyncio.Task[None]] = []
         self._closed = False
+        self._processing: dict[int, int] = {}
         self.stats = PipelineStats()
 
     @property
@@ -143,7 +146,8 @@ class AsrPipeline:
             return
 
         self.stats.segments_emitted += 1
-        self.stats.pcm_bytes_in_flight += size
+        self.stats.pcm_bytes_queued += size
+        self.stats.pcm_bytes_in_flight = self.stats.pcm_bytes_queued + self.stats.pcm_bytes_processing
         self.stats.peak_pcm_bytes_in_flight = max(
             self.stats.peak_pcm_bytes_in_flight, self.stats.pcm_bytes_in_flight
         )
@@ -161,12 +165,23 @@ class AsrPipeline:
             segment = queue.get_nowait()
         except asyncio.QueueEmpty:
             return None
-        self._release(segment)
+        self._mark_processing(segment)
         return segment
 
-    def _release(self, segment: SpeechSegment) -> None:
+    def _mark_processing(self, segment: SpeechSegment) -> None:
         size = len(segment.pcm16)
-        self.stats.pcm_bytes_in_flight = max(0, self.stats.pcm_bytes_in_flight - size)
+        self.stats.pcm_bytes_queued = max(0, self.stats.pcm_bytes_queued - size)
+        self.stats.pcm_bytes_processing += size
+        self.stats.pcm_bytes_in_flight = self.stats.pcm_bytes_queued + self.stats.pcm_bytes_processing
+        self._processing[id(segment)] = size
+
+    def release_segment(self, segment: SpeechSegment) -> None:
+        """ASR 处理结束（成功/失败/取消/超时）后释放 PCM；幂等。"""
+        size = self._processing.pop(id(segment), None)
+        if size is None:
+            return
+        self.stats.pcm_bytes_processing = max(0, self.stats.pcm_bytes_processing - size)
+        self.stats.pcm_bytes_in_flight = self.stats.pcm_bytes_queued + self.stats.pcm_bytes_processing
         self.stats.pcm_bytes_released += size
 
     def next_segment(self, source: str) -> SpeechSegment | None:
@@ -179,7 +194,7 @@ class AsrPipeline:
         if queue is None:
             raise RuntimeError("pipeline is not started")
         segment = await queue.get()
-        self._release(segment)
+        self._mark_processing(segment)
         return segment
 
     async def stop_graceful(self, *, deadline_seconds: float = 5.0) -> None:
@@ -205,7 +220,14 @@ class AsrPipeline:
                 queue.get_nowait()
         for queue in self._segment_queues.values():
             while not queue.empty():
-                self._release(queue.get_nowait())
+                segment = queue.get_nowait()
+                size = len(segment.pcm16)
+                self.stats.pcm_bytes_queued = max(0, self.stats.pcm_bytes_queued - size)
+                self.stats.pcm_bytes_released += size
+        self.stats.pcm_bytes_processing = 0
+        self.stats.pcm_bytes_released += sum(self._processing.values())
+        self._processing.clear()
+        self.stats.pcm_bytes_in_flight = 0
 
     async def close(self) -> None:
         """关闭并释放全部 PCM；可重复调用。"""
@@ -254,6 +276,8 @@ class AsrPipeline:
             "workerErrors": self.stats.worker_errors,
             "queueDepth": sum(queue.qsize() for queue in self._frame_queues.values()),
             "segmentQueueDepth": sum(queue.qsize() for queue in self._segment_queues.values()),
+            "pcmBytesQueued": self.stats.pcm_bytes_queued,
+            "pcmBytesProcessing": self.stats.pcm_bytes_processing,
             "pcmBytesInFlight": self.stats.pcm_bytes_in_flight,
             "peakPcmBytesInFlight": self.stats.peak_pcm_bytes_in_flight,
             "pcmBytesDropped": self.stats.pcm_bytes_dropped,

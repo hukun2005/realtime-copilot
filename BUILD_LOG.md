@@ -728,7 +728,59 @@ Provider 全部使用 Mock；真实网络路径未测。
   **NOT_VERIFIED**（无 API Key，未执行）。
 - 真实会议音频评测语料未建立（按要求不上传隐私音频）。
 
+## 2026-11-21 · P3.2.1：ASR 正确性修复
+
+分支：`feature/p3-2-1-asr-correctness`（基线 `1390355`）。
+
+### Deepgram final 累积（A1/A2）
+
+- `is_final` 文本块累积到 utterance；`speech_final` 才产出 final；空文本事件安全忽略。
+- 每个 Segment 独立 revision：每次 partial 递增，final 使用最新 revision；不同 Segment 互不影响。
+- `speech_final` 后短暂 drain 剩余消息；CloseStream 后到达的结果仍会被处理。
+- 提前关闭映射 `asr_connection_lost`，接收超时映射 `asr_timeout`，空 PCM/格式错误映射 `asr_invalid_audio`。
+
+### 会话级生命周期（A3/A4）
+
+- 新增 `AsrCoordinator`：Core 启动时 ASR 为 IDLE；`capture.start` 后按 generation 创建 Manager；
+  `capture.stop`/失败收尾停止 Manager 并先把 generation 置 0，旧结果无法广播。
+- `CaptureController` 通过 `on_capture_start/on_capture_stop` 回调触发，不复制采集状态机；
+  ASR 回调异常只记录日志，不影响采集。
+- Manager 在每次发布前校验 active、generation、segmentId、source；旧 generation 结果拒绝并广播 `asr_stale_generation`。
+
+### Provider 取消与清理（A5）
+
+- Deepgram 维护活动 socket 集合；`cancel`/`close` 关闭连接，幂等；取消后不再发布结果。
+
+### PCM 预算（A6）
+
+- 预算拆成 `pcmBytesQueued` + `pcmBytesProcessing`；`get_segment` 只标记 processing，
+  ASR 在成功/失败/取消/超时后调用 `release_segment`（幂等）。
+- `total = queued + processing` 参与全局预算判断；close 释放全部。
+
+### 状态与错误（A7）
+
+- 错误码新增并区分：`asr_auth_missing`、`asr_rate_limited`、`asr_connection_lost`、
+  `asr_invalid_audio`、`asr_provider_error`、`asr_stale_generation`。
+- 单段失败只广播 `asr.error`，不把 Provider 整体标为断开。
+
+### 测试
+
+新增 19 个：Deepgram final 累积/revision/超时/提前关闭/取消（11）、Coordinator 生命周期与旧会话隔离（6）、
+PCM processing 预算（2）。
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **289 passed, 1 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed（本轮未改 C#） |
+| `pnpm -C packages/protocol test` | 26 passed |
+
+### 未完成
+
+真实 Deepgram 连接与识别验证不在本 PR（PR B）；30/60 分钟长稳未执行。
+
 ### 变更记录
+
 
 | 日期 | 变更 |
 |---|---|
@@ -743,5 +795,6 @@ Provider 全部使用 Mock；真实网络路径未测。
 | 2026-11-21 | P3.1：完整 PCM Ring Buffer、VAD 运行时流水线与有界 ASR 队列 |
 | 2026-11-21 | P3.1.1：PCM 口径、双指标 VAD、Provider 抽象、PCM 预算与生命周期 |
 | 2026-11-21 | P3.2：ASR Provider 抽象、Manager、票据校验、事件广播与 Deepgram 适配器（未验证） |
+| 2026-11-21 | P3.2.1：Deepgram final 累积、revision、会话级 Manager、generation 隔离与 PCM lease |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |

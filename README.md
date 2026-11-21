@@ -93,7 +93,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频 + 控制面 + ASR 运行时） | `uv run pytest -q` | 270 passed, 1 skipped |
+| Python（协议 + Core + 音频 + 控制面 + ASR 运行时） | `uv run pytest -q` | 289 passed, 1 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
 | C# | `dotnet test services/audio-capture/tests -c Release` | 91 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 22 passed |
@@ -132,7 +132,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | P2-C.1 控制面并发与清理加固 | 完成 |
 | P2-C.2 最终加固（锁外 spawn、任务绑定、票据边界） | 完成 |
 | P2-D / P2-D.1 音频可靠性 | 按来源统计、Channel、稳定性、设备恢复策略与 loopback 能力探测完成；实机热插拔与目标应用验证 NOT_VERIFIED |
-| P3 / P3.2 流式 ASR | 协议、VAD、Provider 运行时与 Mock 测试完成；Deepgram 实现未验证（NOT_VERIFIED） |
+| P3 / P3.2.1 流式 ASR | 协议、VAD、会话级 Provider 运行时与 correctness 测试完成；真实 Deepgram 识别仍未验证（NOT_VERIFIED） |
 | P4 问题检测 | 未开始 |
 | P5 DeepSeek 问答 | 未开始 |
 | P6 Electron 悬浮窗 | 未开始 |

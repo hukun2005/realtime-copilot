@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 
 from copilot_protocol import PROTOCOL_VERSION, make_asr_status
 
-from .asr import AsrManager, AsrProviderConfig, AsrRegistry, AsrStatusTracker
+from .asr import AsrCoordinator, AsrProviderConfig, AsrRegistry, AsrStatusTracker
 from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
@@ -63,40 +63,9 @@ def create_app(
                 ui_connections.discard(connection)
 
     tickets = TicketIssuer(ttl_seconds=config.capture.ticket_ttl_seconds)
-    controller = CaptureController(
-        config=config.capture,
-        tickets=tickets,
-        logger=get_logger("copilot_core.capture"),
-        broadcast=broadcast,
-        source_stats=lambda: app.state.audio.snapshot()["sources"],
-    )
-
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.audio.pipeline.start()
-        asr_manager: AsrManager | None = None
-        provider_name = os.environ.get("RTC_ASR_PROVIDER")
-        if provider_name:
-            try:
-                provider = AsrRegistry.create(
-                    AsrProviderConfig(
-                        name=provider_name,
-                        language=os.environ.get("RTC_ASR_LANGUAGE", "zh-CN"),
-                    )
-                )
-                asr_manager = AsrManager(
-                    pipeline=app.state.audio.pipeline,
-                    tickets=tickets,
-                    provider=provider,
-                    generation=controller.generation,
-                    broadcast=broadcast,
-                    current_generation=lambda: controller.generation,
-                )
-                app.state.asr_manager = asr_manager
-                await asr_manager.start()
-            except Exception:
-                app.state.asr_manager = None
-                get_logger("copilot_core.asr").exception("asr manager failed to start")
         database = open_database(config.database_path(data_dir))
         app.state.db = database
         app.state.started_at = time.monotonic()
@@ -120,8 +89,8 @@ def create_app(
             yield
         finally:
             await controller.shutdown()
-            if asr_manager is not None:
-                await asr_manager.stop()
+            if asr_coordinator is not None:
+                await asr_coordinator.stop()
             await app.state.audio.pipeline.stop()
             await broadcast(make_asr_status(state=app.state.asr.state.value, since=app.state.asr.since_ms))
             close(database)
@@ -141,6 +110,35 @@ def create_app(
     app.state.roles = {}
     app.state.port = 0
     app.state.audio = AudioHub(config.audio)
+    asr_coordinator: AsrCoordinator | None = None
+    provider_name = os.environ.get("RTC_ASR_PROVIDER")
+    if provider_name:
+        try:
+            provider_config = AsrProviderConfig(
+                name=provider_name,
+                language=os.environ.get("RTC_ASR_LANGUAGE", "zh-CN"),
+            )
+            asr_coordinator = AsrCoordinator(
+                pipeline=app.state.audio.pipeline,
+                tickets=tickets,
+                provider_factory=lambda: AsrRegistry.create(provider_config),
+                broadcast=broadcast,
+                logger=get_logger("copilot_core.asr"),
+            )
+        except Exception:
+            get_logger("copilot_core.asr").exception("asr coordinator creation failed")
+    app.state.asr_coordinator = asr_coordinator
+
+    controller = CaptureController(
+        config=config.capture,
+        tickets=tickets,
+        logger=get_logger("copilot_core.capture"),
+        broadcast=broadcast,
+        source_stats=lambda: app.state.audio.snapshot()["sources"],
+        on_capture_start=asr_coordinator.start if asr_coordinator is not None else None,
+        on_capture_stop=asr_coordinator.stop if asr_coordinator is not None else None,
+    )
+
     app.state.asr = AsrStatusTracker()
     app.state.capture = controller
 
@@ -169,7 +167,12 @@ def create_app(
             "roles": dict(app.state.roles),
             "audio": app.state.audio.snapshot(),
             "capture": controller.snapshot(),
-            "asr": (app.state.asr_manager.snapshot() if getattr(app.state, "asr_manager", None) else None),
+            "asr": (
+                app.state.asr_coordinator.manager.snapshot()
+                if getattr(app.state, "asr_coordinator", None) is not None
+                and app.state.asr_coordinator.manager is not None
+                else None
+            ),
             "database": "ok" if database_ok else "error",
             }
             return JSONResponse(body, status_code=200 if database_ok else 503)

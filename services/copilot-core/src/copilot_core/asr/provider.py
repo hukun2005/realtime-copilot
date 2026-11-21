@@ -55,6 +55,9 @@ class AsrProviderConfig:
     channels: int = 1
     model: str | None = None
     api_key_env: str = "ASR_API_KEY"
+    options: dict[str, str] = field(default_factory=dict)
+    receive_timeout_seconds: float = 15.0
+    connect_timeout_seconds: float = 10.0
 
 
 class AsrProvider(Protocol):
