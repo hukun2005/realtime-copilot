@@ -248,7 +248,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 
 **未完成**
 
-- 真实 ASR provider（DeepSeek / 云厂商 / sherpa-onnx）与转写装配。
+- 真实 ASR provider 实现（Deepgram 适配器已写，未用真实 Key 验证）；其他厂商与 sherpa-onnx 未做。
 - `SileroVad`、`VadProvider` 协议外的模型加载。
 - `asr.status` 的实际广播与 UI 接线（当前只有 tracker 与事件构造函数）。
 - 延迟埋点与 `tools/asr_eval.py`。

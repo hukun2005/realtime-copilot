@@ -55,6 +55,8 @@ export type ErrorCode =
   | 'asr_timeout'
   | 'asr_unavailable'
   | 'asr_segment_conflict'
+  | 'asr_auth_failed'
+  | 'stale_session'
 /**
  * ASR 连接状态；与采集状态机完全独立。
  */

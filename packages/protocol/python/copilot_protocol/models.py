@@ -61,6 +61,8 @@ class ErrorCode(
             'asr_timeout',
             'asr_unavailable',
             'asr_segment_conflict',
+            'asr_auth_failed',
+            'stale_session',
         ]
     ]
 ):
@@ -84,6 +86,8 @@ class ErrorCode(
             'asr_timeout',
             'asr_unavailable',
             'asr_segment_conflict',
+            'asr_auth_failed',
+            'stale_session',
         ],
         Field(
             description='稳定的机器可路由错误码；客户端不得依赖 message 文本。',

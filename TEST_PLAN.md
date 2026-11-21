@@ -210,7 +210,17 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 | PCM 预算 | 单段/全局预算超限丢弃并计数；消费释放；close 清空 |
 | 生命周期 | start/stop_graceful/stop_immediate/close 幂等、无 Task 残留、worker 异常可观察 |
 
-说明：本轮不包含真实 ASR provider、转写装配与延迟评测。
+### P3.2 ASR 运行时
+
+| 类别 | 断言 |
+|---|---|
+| 启动/票据 | purpose=asr、绑定 generation、一次性；旧 generation 拒绝启动 |
+| 结果校验 | revision 单调、final 后拒绝旧 partial、同段只 final 一次、冲突广播 asr.error |
+| 生命周期 | 连接失败/认证失败/超时/取消/停止；停止后迟到结果不广播 |
+| 双来源 | loopback 与 mic 各自串行消费，互不阻塞 |
+| 广播 | asr.status/partial/final/error 经 Core broadcast；Provider 不直接操作 WebSocket |
+
+说明：真实 Provider 使用 Mock 测试；Deepgram 未验证（NOT_VERIFIED）。
 
 ## 5B. 音频可靠性（P2-D）
 
