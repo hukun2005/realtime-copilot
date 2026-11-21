@@ -992,7 +992,40 @@ capture.stop()
 - soak 脚本支持 `-Mic`：`capture.start` 的 `mic.enabled=true`，报告双来源帧数与 ASR 计数。
 - 1 分钟双来源冒烟：loopback 14 final / mic 1 final，0 错误；final P50 1264.9ms / P95 1413.1ms。
 
+## 2026-11-21 · P3.2.8：60 分钟双来源真实 WASAPI + Paraformer
+
+执行：`scripts/asr-soak-wasapi.ps1 -Minutes 60 -Interval 60 -Mic`
+
+| 项 | 值 |
+|---|---|
+| 结果 | **PASS** |
+| Git SHA | `c26edb3445a9af1c93b01fe7920795d12a608ccb` |
+| 工作区 | 干净（`gitDirty=false`） |
+| Windows Build | 10.0.26300 |
+| 模型 | `paraformer-realtime-v2` |
+| 音频 | 真实 WASAPI loopback + mic（扬声器播放 TTS，mic 拾取） |
+| 时长 | 60 分钟（60 个采样点） |
+| 帧数 | loopback 177,059；mic 177,057（各 ~49.2 fps） |
+| 丢帧 / 重复 / 非法 | 0 / 0 / 0 |
+| VAD Segment | 1,993（丢弃 0） |
+| ASR Partial / Final | 10,222 / 1,374 |
+| 按来源 | loopback 9,219 partial / 1,025 final；mic 1,003 / 349 |
+| ASR 错误 | 0 |
+| 连接尝试 / 失败 | 1,994 / 0 |
+| 首次 partial 延迟 | P50 870.5 ms / P95 1,138.6 ms |
+| Final 延迟 | P50 1,217.2 ms / P95 1,791.5 ms |
+| PCM 峰值 in-flight | 1,251,200 B（≈1.2 MiB，预算 32 MiB） |
+| 进程内存 | WorkingSet 46.0 MB；PrivateBytes 48.4 MB；Peak WS 78.6 MB |
+
+### 限制
+
+- TTS 循环音频，不是真实会议；未测 WER。
+- mic 拾取的是扬声器外放声音，不是独立说话人；双来源隔离已由计数验证，但非真人双讲。
+- 每次 Segment 一条 WebSocket（1994 次连接），未做连接复用。
+- 未采集端到端字幕延迟（只有 Segment 内首次 partial / final 延迟）。
+
 ### 变更记录
+
 
 
 
