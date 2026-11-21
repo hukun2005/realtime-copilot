@@ -48,6 +48,7 @@ class AsrManager:
         self._finals = 0
         self._errors = 0
         self._error_codes: dict[str, int] = {}
+        self._by_source: dict[str, dict[str, int]] = {}
         self._current_generation = current_generation
 
     @property
@@ -75,6 +76,7 @@ class AsrManager:
             "finals": self._finals,
             "errors": self._errors,
             "errorCodes": dict(self._error_codes),
+            "bySource": {key: dict(value) for key, value in self._by_source.items()},
         }
 
     async def start(self) -> bool:
@@ -215,10 +217,13 @@ class AsrManager:
             await self._publish_error("asr_segment_conflict", str(error), segment.segment_id)
             return
 
+        stats = self._by_source.setdefault(result.source, {"partials": 0, "finals": 0})
         if result.final:
             self._finals += 1
+            stats["finals"] += 1
         else:
             self._partials += 1
+            stats["partials"] += 1
         event = make_asr_result(
             "asr.final" if result.final else "asr.partial",
             segment_id=result.segment_id,

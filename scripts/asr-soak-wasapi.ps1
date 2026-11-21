@@ -10,7 +10,8 @@
 #>
 param(
     [double]$Minutes = 30,
-    [int]$Interval = 30
+    [int]$Interval = 30,
+    [switch]$Mic
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,8 +78,10 @@ try {
     ) -PassThru -WindowStyle Hidden
 
     Write-Host "[soak] running $Minutes minute(s), sampling every $Interval s"
+    $extra = @()
+    if ($Mic) { $extra += "--mic" }
     & $python (Join-Path $root "scripts/asr_soak_wasapi.py") `
-        --runtime $runtimePath --minutes $Minutes --interval $Interval --output $reportPath
+        --runtime $runtimePath --minutes $Minutes --interval $Interval --output $reportPath @extra
     $code = $LASTEXITCODE
 
     if (Test-Path $reportPath) {

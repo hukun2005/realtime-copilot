@@ -45,6 +45,7 @@ class DashScopeParaformerProvider(AsrProvider):
         self._state = "idle"
         self._closed = False
         self._active: set[Any] = set()
+        self._latencies: list[tuple[float, float]] = []
         self._metrics: dict[str, float] = {
             "connection_attempts": 0,
             "connection_successes": 0,
@@ -63,6 +64,15 @@ class DashScopeParaformerProvider(AsrProvider):
     def metrics(self) -> dict[str, float]:
         data = dict(self._metrics)
         data["active_web_sockets"] = len(self._active)
+        if self._latencies:
+            finals = sorted(item[1] for item in self._latencies)
+            partials = sorted(item[0] for item in self._latencies if item[0] > 0)
+            data["latencySamples"] = len(finals)
+            data["finalP50Ms"] = round(_percentile(finals, 50), 1)
+            data["finalP95Ms"] = round(_percentile(finals, 95), 1)
+            if partials:
+                data["firstPartialP50Ms"] = round(_percentile(partials, 50), 1)
+                data["firstPartialP95Ms"] = round(_percentile(partials, 95), 1)
         return data
 
     @property
@@ -108,6 +118,8 @@ class DashScopeParaformerProvider(AsrProvider):
         socket = await self._open_socket()
         revision = 0
         committed = ""
+        started_at = time.monotonic()
+        first_partial_ms = 0.0
         try:
             await self._run_task(socket)
             await self._send_audio(socket, segment.pcm16)
@@ -122,6 +134,10 @@ class DashScopeParaformerProvider(AsrProvider):
                 if event == "task-finished":
                     # 一个 SpeechSegment 只能有一个 final；多句在此合并。
                     if committed:
+                        final_ms = (time.monotonic() - started_at) * 1000
+                        self._latencies.append((first_partial_ms, final_ms))
+                        if len(self._latencies) > 5000:
+                            del self._latencies[:1000]
                         revision += 1
                         yield AsrResult(
                             segment_id=segment.segment_id,
@@ -140,6 +156,8 @@ class DashScopeParaformerProvider(AsrProvider):
                 text = str(sentence.get("text") or "").strip()
                 if not text:
                     continue
+                if first_partial_ms == 0.0:
+                    first_partial_ms = (time.monotonic() - started_at) * 1000
                 if sentence.get("sentence_end"):
                     committed = f"{committed}{text}" if committed else text
                     text = committed
@@ -317,6 +335,13 @@ def _sentence(message: dict[str, Any]) -> dict[str, Any] | None:
     output = payload.get("output") or {}
     sentence = output.get("sentence")
     return sentence if isinstance(sentence, dict) else None
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    if not values:
+        return 0.0
+    index = min(len(values) - 1, max(0, round((percentile / 100) * (len(values) - 1))))
+    return values[index]
 
 
 def _status_code(error: Exception) -> int | None:
