@@ -917,7 +917,44 @@ capture.stop()
 - 真实会议音频、WER、P95 延迟未测。
 - 热词/自定义词汇表未接入（可改善 Vue3/TypeScript 识别）。
 
+## 2026-11-21 · P3.2.5：真实 WASAPI soak 准备与 30 分钟尝试
+
+分支：`feature/p3-2-5-wasapi-soak-harness`（基线 `0cd1992`）。
+
+### 新增
+
+- `scripts/asr-soak-wasapi.ps1`：启动真实 Core + sidecar，播放本地 TTS，控制面 `capture.start`，
+  周期采样 `/healthz`，输出 `artifacts/asr-soak/wasapi-soak.json`。
+- `scripts/asr_soak_wasapi.py`：控制面驱动与报告（SHA/dirty/Windows Build/PCM/进程内存/ASR 计数）。
+- `scripts/play-loop.ps1`：循环播放测试语音。
+- `AsrManager` 快照新增 `partials` / `finals` / `errors` 计数。
+- App 按 provider 选择 Key 环境变量（aliyun → `DASHSCOPE_API_KEY`）。
+
+### 30 分钟尝试结果：未通过（环境/链路缺陷）
+
+连续 3 次尝试均在同一处失败：
+
+- Core 控制面成功拉起 sidecar，sidecar 以 `role=audio` 连接并收到 `capture.start`；
+- 侧车日志显示 `capture started`、`first capture buffer bytes=3840 48000Hz 2ch`；
+- 随即 `capture stopped: source=loopback sent=0 dropped=0`，音频连接关闭；
+- Core 报 `sidecar_exited (exit code 1)`，`capture.start` 返回 `error`。
+
+结论：**30 分钟真实 WASAPI + Paraformer 未完成，报告为 NOT_RUN / FAIL，不是 PASS。**
+该失败发生在采集控制面消费循环（首帧后立即停止），与 Paraformer Provider 无关；
+需先修复 sidecar 控制模式生命周期，再重跑。
+
+### 其他验证
+
+- 阿里云 Provider 真实 API 自检已在 P3.2.4 完成：**PASS**（15 partial / 2 final）。
+- Python **318 passed / 3 skipped**；ruff 通过。
+
+### 未完成
+
+- 30 分钟/60 分钟真实 WASAPI 联合测试：**NOT_RUN**。
+- 真实会议音频、WER、P95 延迟：未测。
+
 ### 变更记录
+
 
 
 
@@ -940,5 +977,6 @@ capture.stop()
 | 2026-11-21 | P3.2.2：Deepgram 参数核对、真实 API 自检脚本（本机 SKIP）与文档状态统一 |
 | 2026-11-21 | P3.2.3：生命周期竞态、Deepgram READY/Drain/重试、进程内存观测 |
 | 2026-11-21 | P3.2.4：阿里云 Paraformer 实时 ASR Provider，真实 API PASS |
+| 2026-11-21 | P3.2.5：WASAPI soak 脚本；30 分钟尝试因 sidecar 首帧后退出而未通过 |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
