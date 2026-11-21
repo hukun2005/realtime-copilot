@@ -229,6 +229,32 @@
             "null"
           ],
           "maxLength": 64
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopback": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AudioSourceStats"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mic": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AudioSourceStats"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -910,6 +936,73 @@
         },
         "payload": {
           "$ref": "#/$defs/AsrErrorPayload"
+        }
+      }
+    },
+    "AudioSourceStats": {
+      "title": "AudioSourceStats",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "framesReceived",
+        "framesDropped",
+        "duplicates",
+        "invalid",
+        "silenceDurationMs"
+      ],
+      "properties": {
+        "framesReceived": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "framesDropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "peakDbfs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rmsDbfs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "silenceDurationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastFrameTimestamp": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currentSampleRate": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currentChannels": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
         }
       }
     }

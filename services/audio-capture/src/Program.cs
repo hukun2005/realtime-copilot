@@ -13,6 +13,13 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args.Contains("--version"))
+        {
+            var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+            Console.Out.WriteLine(version);
+            return 0;
+        }
+
         if (args.Contains("--list-devices"))
         {
             var devices = Capture.DeviceCatalog.List();

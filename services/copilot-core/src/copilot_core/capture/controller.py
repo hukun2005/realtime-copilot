@@ -75,11 +75,13 @@ class CaptureController:
         tickets: TicketIssuer,
         logger: Any,
         broadcast: Callable[[Any], Awaitable[None]],
+        source_stats: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self._config = config
         self._tickets = tickets
         self._logger = logger
         self._broadcast = broadcast
+        self._source_stats = source_stats
         self._lock = asyncio.Lock()
         self._machine = CaptureStateMachine()
         self._session: _Session | None = None
@@ -572,6 +574,7 @@ class CaptureController:
             mode=session.mode if session else None,
             error=machine.error_message,
             error_code=machine.error_code,
+            sources=self._source_stats() if self._source_stats is not None else None,
         )
 
     def _error(self, event: Any, code: str, message: str) -> Any:

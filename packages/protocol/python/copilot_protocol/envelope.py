@@ -218,6 +218,7 @@ def make_audio_status(
     mode: str | None = None,
     error: str | None = None,
     error_code: str | None = None,
+    sources: dict[str, Any] | None = None,
     request_id: str | None = None,
 ) -> AudioStatusEvent:
     """构造 audio.status 事件。
@@ -249,6 +250,7 @@ def make_audio_status(
             since=since,
             error=error,
             error_code=error_code,
+            sources=sources,
         ),
     )
 

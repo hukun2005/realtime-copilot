@@ -23,7 +23,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $OutDir) { $OutDir = Join-Path $root ".artifacts/stability" }
+if (-not $OutDir) { $OutDir = Join-Path $root "artifacts/capture-stability" }
 $dataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("rtc-stability-" + [guid]::NewGuid().ToString("N"))
 $core = $null
 $session = $null
@@ -67,6 +67,29 @@ with wave.open(sys.argv[1], 'wb') as handle:
     & dotnet build (Join-Path $root "tools/tone-player/TonePlayer.csproj") -c $Configuration --nologo | Out-Null
     & dotnet build (Join-Path $root "services/audio-capture/AudioCapture.csproj") -c $Configuration --nologo | Out-Null
     $tonePlayer = Join-Path $root "tools/tone-player/bin/$Configuration/net10.0/tone-player.dll"
+    $captureDll = Join-Path $root "services/audio-capture/bin/$Configuration/net10.0/audio-capture.dll"
+    $gitSha = (git -C $root rev-parse HEAD 2>$null)
+    if (-not $gitSha) { $gitSha = "unknown" }
+    $sidecarVersion = (dotnet $captureDll --version 2>$null)
+    if (-not $sidecarVersion) { $sidecarVersion = "unknown" }
+    $mode = if ($Simulated) { "simulated" } else { "wasapi-loopback" }
+
+    if (-not $Simulated) {
+        $devices = & dotnet $captureDll --list-devices | ConvertFrom-Json
+        if (-not ($devices | Where-Object { $_.flow -eq "loopback" })) {
+            $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+            $skip = [pscustomobject]@{
+                result = "SKIP"; reason = "no_audio_device"; simulated = $false
+                gitSha = $gitSha; sidecarVersion = $sidecarVersion
+                generatedAt = (Get-Date).ToString("o")
+            }
+            $skipPath = Join-Path $OutDir "stability-$stamp-skip.json"
+            $skip | ConvertTo-Json -Depth 3 | Set-Content $skipPath -Encoding utf8
+            Write-Host "[stability] SKIP (no audio device): $skipPath"
+            $skip | ConvertTo-Json -Compress
+            exit 0
+        }
+    }
 
     $env:RTC_DATA_DIR = $dataDir
     $env:RTC_SERVER_PORT = "0"
@@ -79,14 +102,18 @@ with wave.open(sys.argv[1], 'wb') as handle:
     $runtime = Wait-ForRuntime $runtimePath
     $httpBase = "http://127.0.0.1:$($runtime.port)"
 
-    # 持续播放测试音（每轮 5 秒，直到脚本结束）。
-    $toneLoop = Start-Process -FilePath "pwsh" -ArgumentList "-NoProfile", "-Command",
-        "`$deadline = (Get-Date).AddMinutes($Minutes); while ((Get-Date) -lt `$deadline) { dotnet '$tonePlayer' 5 | Out-Null }" `
-        -PassThru -WindowStyle Hidden
+    # 真实设备模式持续播放测试音；模拟模式不需要。
+    if (-not $Simulated) {
+        $toneLoop = Start-Process -FilePath "pwsh" -ArgumentList "-NoProfile", "-Command",
+            "`$deadline = (Get-Date).AddMinutes($Minutes); while ((Get-Date) -lt `$deadline) { dotnet '$tonePlayer' 5 | Out-Null }" `
+            -PassThru -WindowStyle Hidden
+    }
 
     $startOut = & $python (Join-Path $root "scripts/control_client.py") start --runtime $runtimePath 2>&1 | Select-Object -Last 1
     Write-Host "[stability] start: $startOut"
     if ($startOut -notmatch '"state": "capturing"') { throw "capture did not start: $startOut" }
+    $captureStartedAt = Get-Date
+    $captureStartedAtText = $captureStartedAt.ToString("o")
 
     Start-Sleep -Seconds 2
     $samples = [System.Collections.Generic.List[object]]::new()
@@ -134,6 +161,8 @@ with wave.open(sys.argv[1], 'wb') as handle:
         Start-Sleep -Seconds $SampleSeconds
     }
 
+    $captureEndedAt = Get-Date
+
     # 主动停止采集，并等待状态回到 idle。
     $stopOut = & $python (Join-Path $root "scripts/control_client.py") stop --runtime $runtimePath 2>&1 | Select-Object -Last 1
     Write-Host "[stability] stop: $stopOut"
@@ -143,9 +172,36 @@ with wave.open(sys.argv[1], 'wb') as handle:
     $first = $samples | Select-Object -First 1
     $windows = Get-CimInstance Win32_OperatingSystem
     $elapsedMinutes = ((Get-Date) - $startedAt).TotalMinutes
+    $elapsedSeconds = ($captureEndedAt - $captureStartedAt).TotalSeconds
+    $theoreticalFrames = [Math]::Round($elapsedSeconds * 50)
+    $expectedSamples = [Math]::Floor($Minutes * 60 / $SampleSeconds)
+    $sampleGaps = @()
+    for ($index = 1; $index -lt $samples.Count; $index++) {
+        $sampleGaps += [Math]::Round(($samples[$index].elapsedSeconds - $samples[$index - 1].elapsedSeconds), 1)
+    }
+    $maxSampleGap = if ($sampleGaps.Count -gt 0) { ($sampleGaps | Measure-Object -Maximum).Maximum } else { 0 }
+    $frameTolerance = [Math]::Max(200, [Math]::Round($theoreticalFrames * 0.05))
+    $sampleOk = $samples.Count -ge [Math]::Floor($expectedSamples * 0.9)
+    $gapOk = $maxSampleGap -le ($SampleSeconds * 3)
+    $frameOk = [Math]::Abs([int]$finalHealth.audio.frames - $theoreticalFrames) -le $frameTolerance
+
     $report = [pscustomobject]@{
-        result = if ($finalHealth.capture.state -eq "idle" -and $elapsedMinutes -ge $Minutes) { "PASS" } else { "FAIL" }
+        result = if ($finalHealth.capture.state -eq "idle" -and $elapsedMinutes -ge $Minutes -and $sampleOk -and $gapOk -and $frameOk) { "PASS" } else { "FAIL" }
+        expectedSamples = $expectedSamples
+        maxSampleGapSeconds = $maxSampleGap
+        sampleOk = $sampleOk
+        gapOk = $gapOk
+        frameOk = $frameOk
+        frameTolerance = $frameTolerance
+        gitSha = $gitSha
+        sidecarVersion = $sidecarVersion
+        mode = $mode
         simulated = [bool]$Simulated
+        startedAt = $captureStartedAtText
+        endedAt = (Get-Date).ToString("o")
+        theoreticalFrames = $theoreticalFrames
+        actualFrames = [int]$finalHealth.audio.frames
+        frameDelta = [int]$finalHealth.audio.frames - $theoreticalFrames
         windows = [ordered]@{ caption = $windows.Caption; version = $windows.Version; build = $windows.BuildNumber }
         stateTransitions = $transitions
         sidecarExitCode = $finalHealth.capture.sidecarExitCode

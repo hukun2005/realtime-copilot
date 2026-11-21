@@ -66,6 +66,7 @@ def create_app(
         tickets=tickets,
         logger=get_logger("copilot_core.capture"),
         broadcast=broadcast,
+        source_stats=lambda: app.state.audio.snapshot()["sources"],
     )
 
     @asynccontextmanager

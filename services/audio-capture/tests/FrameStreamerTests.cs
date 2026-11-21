@@ -13,6 +13,8 @@ public sealed class FrameStreamerTests
 
         public bool Stopped { get; private set; }
 
+        public int StopCount { get; private set; }
+
         public event EventHandler<AudioFrame>? FrameAvailable;
 
         public event EventHandler<CaptureFailure>? Failed;
@@ -26,6 +28,7 @@ public sealed class FrameStreamerTests
         public Task StopAsync(CancellationToken cancellationToken)
         {
             Stopped = true;
+            StopCount++;
             return Task.CompletedTask;
         }
 
@@ -114,6 +117,72 @@ public sealed class FrameStreamerTests
 
         var exception = await Assert.ThrowsAsync<CoreConnectionException>(() => task);
         Assert.Equal("send_failed", exception.Code);
+    }
+
+    [Fact]
+    public async Task RunAsync_DropsFramesWhenConsumerBlocks()
+    {
+        var source = new FakeSource();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var streamer = new FrameStreamer(
+            source,
+            async (_, _) => await gate.Task.ConfigureAwait(false),
+            NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+
+        for (var index = 0; index < 300; index++)
+        {
+            source.Emit(Frame((uint)index, (ulong)index * 1_000_000));
+        }
+
+        await WaitUntil(() => streamer.FramesDropped > 0);
+        Assert.InRange(streamer.FramesDropped, 1u, 300u);
+
+        gate.SetResult();
+        cancellation.Cancel();
+        await task;
+        Assert.True(source.Stopped);
+    }
+
+    [Fact]
+    public async Task RunAsync_StopsSourceExactlyOnce()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(
+            source,
+            (_, _) => Task.CompletedTask,
+            NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+        cancellation.Cancel();
+        await task;
+
+        Assert.True(source.Stopped);
+        Assert.Equal(1, source.StopCount);
+    }
+
+    [Fact]
+    public async Task EmitAfterStop_DoesNotThrow()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(
+            source,
+            (_, _) => Task.CompletedTask,
+            NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+        cancellation.Cancel();
+        await task;
+
+        source.Emit(Frame(9, 9));
+        Assert.Equal(1, source.StopCount);
     }
 
     private static async Task WaitUntil(Func<bool> condition, int timeoutMs = 3000)
