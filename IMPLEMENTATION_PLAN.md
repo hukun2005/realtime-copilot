@@ -242,7 +242,8 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P3-A 协议冻结 | `asr.status` / `asr.partial` / `asr.final` / `asr.error` schema、fixtures、TS 与 Pydantic 生成 |
 | P3-B 状态分离 | `AsrStatusTracker` 独立于采集状态机；ASR error 不改变 capture 状态（有测试） |
 | P3-C 票据 | `TicketIssuer.issue(purpose, generation)`；audio/asr 隔离、一次性、过期、旧会话拒绝 |
-| P3-D VAD | `EnergyVad` + `Segmenter`：per-source 状态、有界 Ring Buffer、speech_started/ongoing/ended |
+| P3-D VAD | `EnergyVad` + `Segmenter`：per-source 状态、完整 PCM 帧 Ring Buffer、pre-roll、超长切分 |
+| P3.1 运行时 | `AsrPipeline` 有界帧/片段队列接入 `AudioSession`；`asr.status` idle 广播；段缓存上限 |
 
 **未完成**
 

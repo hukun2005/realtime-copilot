@@ -1,10 +1,14 @@
-"""本地 VAD：能量阈值 + 片段切分。
+"""本地 VAD：能量阈值 + 片段切分 + 完整 PCM 帧缓冲。
 
 设计约束：
 
-- loopback 与 mic 各自维护独立状态，互不影响。
-- 每个来源有一个**有界** Ring Buffer；只保留最近 N 帧，溢出即丢弃最旧帧并计数。
-- 不缓存无上限音频，ASR 处理慢时不会无限积压。
+- loopback 与 mic 各自维护独立状态（Ring Buffer / Segmenter / 计数），互不影响。
+- Ring Buffer 保存**完整帧**（含 PCM、时间戳、采样参数），默认 2 秒 pre-roll。
+- Ring Buffer 覆盖最旧帧属于循环缓冲行为，单独计为 ``ring_buffer_evictions``；
+  与 ASR 输入队列的丢弃是两回事。
+- 片段包含 pre-roll 与起始确认阶段的帧；结束时间取最后一帧有效语音，
+  结束静音单独记录，不计入有效语音时长。
+- 超长语音按 ``max_segment_ms`` 切分，避免无限增长。
 """
 
 from __future__ import annotations
@@ -28,16 +32,35 @@ class VadEventKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class VadFrame:
+    """送入 VAD 的一帧音频（保留 PCM 供 ASR 使用）。"""
+
+    source: str
+    sequence: int
+    capture_ts_ns: int
+    pcm16: bytes
+    sample_rate: int
+    channels: int
+    frame_duration_ms: int
+    peak_dbfs: float
+    rms_dbfs: float
+
+
+@dataclass(frozen=True)
 class SpeechSegment:
-    """一段连续语音。"""
+    """一段连续语音；PCM 可直接交给 ASR provider。"""
 
     segment_id: str
     source: str
     start_ts_ns: int
     end_ts_ns: int
     frames: int
+    pcm16: bytes
+    sample_rate: int
+    channels: int
     peak_dbfs: float
     rms_dbfs: float
+    end_silence_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -65,22 +88,31 @@ class EnergyVad:
 
 
 @dataclass
-class _SourceState:
+class _SegmentState:
     active: bool = False
+    frames: list[VadFrame] = field(default_factory=list)
     start_ts_ns: int = 0
-    last_ts_ns: int = -1
-    speech_ms: int = 0
+    last_speech_ts_ns: int = 0
+    last_speech_index: int = 0
     silence_ms: int = 0
-    frames: int = 0
+    speech_ms: int = 0
     peak_dbfs: float = -120.0
-    sum_energy: float = 0.0
+    energy_sum: float = 0.0
     segment_index: int = 0
-    buffer: deque[tuple[int, float]] = field(default_factory=deque)
-    dropped: int = 0
+    emitted_silence_ms: int = 0
+
+
+@dataclass
+class _SourceState:
+    ring: deque[VadFrame]
+    ring_evictions: int = 0
+    last_ts_ns: int = -1
+    candidate_ms: int = 0
+    current: _SegmentState = field(default_factory=_SegmentState)
 
 
 class Segmenter:
-    """把逐帧能量切成语音片段，并为每个来源维护有界缓冲。"""
+    """把逐帧音频切成语音片段，并为每个来源维护有界 Ring Buffer。"""
 
     def __init__(
         self,
@@ -88,117 +120,161 @@ class Segmenter:
         threshold_dbfs: float = -50.0,
         start_ms: int = 120,
         end_silence_ms: int = 400,
+        pre_roll_ms: int = 2000,
+        max_segment_ms: int = 30_000,
         frame_ms: int = 20,
-        ring_max_frames: int = 1500,
     ) -> None:
         if frame_ms <= 0:
             raise ValueError("frame_ms must be positive")
-        if ring_max_frames <= 0:
-            raise ValueError("ring_max_frames must be positive")
+        if start_ms < 0 or end_silence_ms < 0 or pre_roll_ms < 0 or max_segment_ms <= 0:
+            raise ValueError("invalid VAD windows")
+
         self._vad = EnergyVad(threshold_dbfs=threshold_dbfs)
         self._start_ms = start_ms
         self._end_silence_ms = end_silence_ms
+        self._pre_roll_frames = max(1, pre_roll_ms // frame_ms)
+        self._max_segment_ms = max_segment_ms
         self._frame_ms = frame_ms
-        self._ring_max_frames = ring_max_frames
+        ring_capacity = self._pre_roll_frames + (start_ms // frame_ms) + 2
         self._states: dict[str, _SourceState] = {
-            source: _SourceState(buffer=deque(maxlen=ring_max_frames)) for source in SOURCES
+            source: _SourceState(ring=deque(maxlen=ring_capacity)) for source in SOURCES
         }
 
     @property
     def threshold_dbfs(self) -> float:
         return self._vad.threshold_dbfs
 
-    def buffered_frames(self, source: str) -> int:
-        return len(self._state(source).buffer)
+    def ring_evictions(self, source: str) -> int:
+        return self._state(source).ring_evictions
 
-    def dropped_frames(self, source: str) -> int:
-        return self._state(source).dropped
+    def buffered_frames(self, source: str) -> int:
+        return len(self._state(source).ring)
 
     def is_active(self, source: str) -> bool:
-        return self._state(source).active
+        return self._state(source).current.active
 
-    def push(self, source: str, dbfs: float, ts_ns: int) -> list[VadEvent]:
-        """处理一帧；返回本次产生的 0..2 个事件。"""
-        state = self._state(source)
-        if ts_ns < state.last_ts_ns:
-            raise ValueError(f"timestamp regression for {source}: {ts_ns} < {state.last_ts_ns}")
-        state.last_ts_ns = ts_ns
-
-        if len(state.buffer) == self._ring_max_frames:
-            state.dropped += 1
-        state.buffer.append((ts_ns, dbfs))
-
-        speech = self._vad.is_speech(dbfs)
-        events: list[VadEvent] = []
-
-        if not state.active:
-            state.speech_ms = state.speech_ms + self._frame_ms if speech else 0
-            if speech and state.start_ts_ns == 0:
-                state.start_ts_ns = ts_ns
-            if state.speech_ms >= self._start_ms:
-                state.active = True
-                state.frames = 0
-                state.peak_dbfs = -120.0
-                state.sum_energy = 0.0
-                state.silence_ms = 0
-                state.segment_index += 1
-                events.append(VadEvent(VadEventKind.SPEECH_STARTED, source, ts_ns))
-            else:
-                return events
-
-        state.frames += 1
-        state.peak_dbfs = max(state.peak_dbfs, dbfs)
-        state.sum_energy += 10 ** (dbfs / 10.0)
-        events.append(VadEvent(VadEventKind.SPEECH_ONGOING, source, ts_ns))
-
-        state.silence_ms = 0 if speech else state.silence_ms + self._frame_ms
-        if state.silence_ms >= self._end_silence_ms:
-            segment = SpeechSegment(
-                segment_id=f"seg_{source}_{state.segment_index}",
-                source=source,
-                start_ts_ns=state.start_ts_ns,
-                end_ts_ns=ts_ns,
-                frames=state.frames,
-                peak_dbfs=round(state.peak_dbfs, 1),
-                rms_dbfs=round(self._rms(state), 1),
+    def push(self, frame: VadFrame) -> list[VadEvent]:
+        """处理一帧；返回本次产生的事件（可能含结束与重新开始）。"""
+        state = self._state(frame.source)
+        if frame.capture_ts_ns < state.last_ts_ns:
+            raise ValueError(
+                f"timestamp regression for {frame.source}: {frame.capture_ts_ns} < {state.last_ts_ns}"
             )
-            events.append(VadEvent(VadEventKind.SPEECH_ENDED, source, ts_ns, segment))
-            state.active = False
-            state.speech_ms = 0
-            state.start_ts_ns = 0
+        state.last_ts_ns = frame.capture_ts_ns
+
+        if len(state.ring) == state.ring.maxlen:
+            state.ring_evictions += 1
+        state.ring.append(frame)
+
+        speech = self._vad.is_speech(frame.peak_dbfs)
+        events: list[VadEvent] = []
+        already_included = False
+
+        if not state.current.active:
+            state.candidate_ms = state.candidate_ms + frame.frame_duration_ms if speech else 0
+            if state.candidate_ms < self._start_ms:
+                return events
+            self._begin_segment(state, frame.source)
+            already_included = True
+            events.append(VadEvent(VadEventKind.SPEECH_STARTED, frame.source, frame.capture_ts_ns))
+
+        current = state.current
+        if (frame.capture_ts_ns - current.start_ts_ns) >= self._max_segment_ms * 1_000_000:
+            events.extend(self._finish_segment(state, frame.source, frame.capture_ts_ns, split=True))
+            self._begin_segment(state, frame.source, include_ring=False)
+            already_included = False
+
+        current = state.current
+        if not already_included:
+            current.frames.append(frame)
+            current.energy_sum += 10 ** (frame.peak_dbfs / 10.0)
+            current.peak_dbfs = max(current.peak_dbfs, frame.peak_dbfs)
+            if speech:
+                current.last_speech_ts_ns = frame.capture_ts_ns
+                current.last_speech_index = len(current.frames) - 1
+                current.silence_ms = 0
+            else:
+                current.silence_ms += frame.frame_duration_ms
+        elif speech:
+            current.last_speech_ts_ns = frame.capture_ts_ns
+            current.last_speech_index = len(current.frames) - 1
+
+        events.append(VadEvent(VadEventKind.SPEECH_ONGOING, frame.source, frame.capture_ts_ns))
+
+        if current.silence_ms >= self._end_silence_ms:
+            events.extend(self._finish_segment(state, frame.source, frame.capture_ts_ns, split=False))
 
         return events
 
-    def flush(self, source: str, ts_ns: int) -> list[VadEvent]:
-        """强制结束当前片段（停止采集时调用）。"""
+    def flush(self, source: str, ts_ns: int | None = None) -> list[VadEvent]:
+        """强制结束当前片段（采集停止时调用）。"""
         state = self._state(source)
-        if not state.active:
+        if not state.current.active:
             return []
+        end = ts_ns if ts_ns is not None else state.last_ts_ns
+        return self._finish_segment(state, source, end, split=False)
+
+    def _begin_segment(self, state: _SourceState, source: str, *, include_ring: bool = True) -> None:
+        current = state.current
+        current.segment_index += 1
+        current.active = True
+        # 启动时纳入 pre-roll + 起始确认帧；超长切分后的新段从当前帧重新开始。
+        current.frames = list(state.ring) if include_ring else []
+        if current.frames:
+            current.start_ts_ns = current.frames[0].capture_ts_ns
+        else:
+            current.start_ts_ns = state.last_ts_ns
+        current.last_speech_ts_ns = current.start_ts_ns
+        current.last_speech_index = max(0, len(current.frames) - 1)
+        current.silence_ms = 0
+        current.speech_ms = 0
+        current.peak_dbfs = max((frame.peak_dbfs for frame in current.frames), default=-120.0)
+        current.energy_sum = sum(10 ** (frame.peak_dbfs / 10.0) for frame in current.frames)
+        current.emitted_silence_ms = 0
+        state.candidate_ms = 0
+
+    def _finish_segment(
+        self,
+        state: _SourceState,
+        source: str,
+        ts_ns: int,
+        *,
+        split: bool,
+    ) -> list[VadEvent]:
+        current = state.current
+        if not current.frames:
+            current.active = False
+            return []
+
+        # 结束时间取最后一帧有效语音，结束静音不计入有效时长。
+        kept = current.frames[: current.last_speech_index + 1]
+        if not kept:
+            kept = current.frames[-1:]
+        peak = max(frame.peak_dbfs for frame in kept)
+        mean_energy = current.energy_sum / len(current.frames) if current.frames else 0.0
+        rms = 10 * math.log10(mean_energy) if mean_energy > 0 else -120.0
         segment = SpeechSegment(
-            segment_id=f"seg_{source}_{state.segment_index}",
+            segment_id=f"seg_{source}_{current.segment_index}",
             source=source,
-            start_ts_ns=state.start_ts_ns,
-            end_ts_ns=max(ts_ns, state.last_ts_ns),
-            frames=state.frames,
-            peak_dbfs=round(state.peak_dbfs, 1),
-            rms_dbfs=round(self._rms(state), 1),
+            start_ts_ns=current.start_ts_ns,
+            end_ts_ns=current.last_speech_ts_ns,
+            frames=len(kept),
+            pcm16=b"".join(frame.pcm16 for frame in kept),
+            sample_rate=kept[-1].sample_rate,
+            channels=kept[-1].channels,
+            peak_dbfs=round(peak, 1),
+            rms_dbfs=round(rms, 1),
+            end_silence_ms=current.silence_ms,
         )
-        state.active = False
-        state.speech_ms = 0
-        state.start_ts_ns = 0
-        return [VadEvent(VadEventKind.SPEECH_ENDED, source, segment.end_ts_ns, segment)]
+        current.active = False
+        current.frames = []
+        current.silence_ms = 0
+        current.candidate_ms = 0
+        _ = split
+        return [VadEvent(VadEventKind.SPEECH_ENDED, source, ts_ns, segment)]
 
     def _state(self, source: str) -> _SourceState:
         try:
             return self._states[source]
         except KeyError as exc:
             raise ValueError(f"unknown audio source: {source}") from exc
-
-    @staticmethod
-    def _rms(state: _SourceState) -> float:
-        if state.frames == 0:
-            return -120.0
-        mean_energy = state.sum_energy / state.frames
-        if mean_energy <= 0:
-            return -120.0
-        return 10 * math.log10(mean_energy)
