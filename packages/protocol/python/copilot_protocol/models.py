@@ -431,6 +431,12 @@ class AudioSourceStats(BaseModel):
         int | None, Field(alias='currentSampleRate', ge=0)
     ] = None
     current_channels: Annotated[int | None, Field(alias='currentChannels', ge=0)] = None
+    state: Literal['capturing', 'device_lost', 'recovering', 'error'] | None = None
+    device_id: Annotated[str | None, Field(alias='deviceId')] = None
+    recovery_attempts: Annotated[int | None, Field(alias='recoveryAttempts', ge=0)] = (
+        None
+    )
+    error_code: Annotated[ErrorCode | None, Field(alias='errorCode')] = None
 
 
 class Sources(BaseModel):

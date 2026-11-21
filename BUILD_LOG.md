@@ -532,6 +532,58 @@ Phase 2-D：进程级 loopback 能力探测与实现；之后 Phase 3 接 ASR。
   **NOT_VERIFIED**，本轮未做任何能力声明。
 - 真实 30 分钟只在本机（Windows 11 26300 + Senary 虚拟声卡 + 测试音）完成，未在目标会议室机器复测。
 
+## 2026-11-21 · P2-D.1：音频恢复与可靠性
+
+分支：`feature/phase-2d1-audio-recovery`（基线 `96b1e47`）。
+
+### 设备恢复（A2）
+
+- 新增 `RecoveryPolicy`：最多 3 次，退避 500ms / 1s / 2s。
+- 默认设备变化：停止旧源 → 重新枚举 → 新 `LoopbackCaptureSource` → 等待 `Started` → 广播新设备 ID；
+  恢复期间广播 `starting` + `errorCode=recovering`，不会静默显示 capturing；3 次失败 → `error` + `device_unavailable`。
+- 显式设备：轮询端点是否仍存在；消失时广播 `device_lost` 并停止，**不静默切换**成默认设备。
+- 恢复失败/超时/设备消失的实机报告：**NOT_VERIFIED**（本机无法安全拔插虚拟声卡）。
+
+### 来源级状态字段（A3）
+
+`AudioSourceStats` 新增可选 `state` / `deviceId` / `recoveryAttempts` / `errorCode`，
+使 `audio.status.sources` 能表达来源级状态；音频二进制协议 v1 未改动。
+
+### FrameStreamer 清理（A4）
+
+- 内部 `CancellationTokenSource`、`SemaphoreSlim` 生命周期锁；统一 `StopAsync`。
+- 取消 → `Writer.TryComplete()` → 等待消费者 → 停止采集源；`RunAsync` finally 统一收尾。
+- `FramesDropped` 改为 `Interlocked` 计数；`StopAsync` / `DisposeAsync` 幂等。
+- 新增 5 个测试：启动前失败、发送失败后清理、多线程回调计数一致、Stop 与回调竞争、重复 Dispose。
+
+### 稳定性报告可信度（A5）
+
+新增 `gitSha`、`gitDirty`、`dirtyFiles`、`sidecarSha256`、`stabilityScriptSha256`、
+`buildConfiguration`、`testMode`、`reproducibility`。工作区不干净时
+`result=NOT_REPRODUCIBLE`，**不会标记 PASS**。已实测：脏工作区运行返回 NOT_REPRODUCIBLE。
+
+### 进程级 loopback 探测（A6）
+
+`audio-capture --probe-process-loopback [pid]` 输出 JSON：Windows Build、Build 是否 ≥20348、
+NAudio 是否暴露 process-loopback API、目标 PID 是否有效；子进程/退出行为/真实音频/
+腾讯会议/微信全部标记 **NOT_VERIFIED**。本机探测结果：build 26300、supported=true、apiPresent=true。
+
+### 实际执行
+
+| 命令 | 结果 |
+|---|---|
+| `dotnet test services/audio-capture/tests -c Release` | **91 passed** |
+| `uv run pytest -q` | **234 passed, 1 skipped** |
+| `pnpm -C packages/protocol test` | 26 passed |
+| `uv run ruff check .` | All checks passed |
+| `--probe-process-loopback` | 输出 NOT_VERIFIED 报告 |
+
+### 未完成
+
+- 真实设备拔插的自动化/实机报告（NOT_VERIFIED）。
+- 腾讯会议、微信 PC 的进程级 loopback 实机验证（NOT_VERIFIED）。
+- 干净工作区的 30 分钟稳定性报告未在本轮重跑；上一轮 30 分钟报告对应 `18613ee` 之前的代码。
+
 ### 变更记录
 
 | 日期 | 变更 |

@@ -185,6 +185,101 @@ public sealed class FrameStreamerTests
         Assert.Equal(1, source.StopCount);
     }
 
+    [Fact]
+    public async Task RunAsync_CaptureFailureBeforeAnyFrame_StopsAndLeavesNoTask()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(source, (_, _) => Task.CompletedTask, NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+
+        source.Fail(new CaptureFailure("device_lost", "device disappeared"));
+
+        var exception = await Assert.ThrowsAsync<CaptureFailedException>(() => task);
+        Assert.Equal("device_lost", exception.Code);
+        Assert.Equal(1, source.StopCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_SendFailure_StopsSourceAndConsumer()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(
+            source,
+            (_, _) => throw new CoreConnectionException("send_failed", "socket closed"),
+            NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+        source.Emit(Frame(0, 0));
+
+        await Assert.ThrowsAsync<CoreConnectionException>(() => task);
+        Assert.Equal(1, source.StopCount);
+        await streamer.StopAsync();
+        Assert.Equal(1, source.StopCount);
+    }
+
+    [Fact]
+    public async Task RunAsync_MultithreadedCallbacks_DoNotLoseCounts()
+    {
+        var source = new FakeSource();
+        var sent = 0;
+        var streamer = new FrameStreamer(
+            source,
+            (_, _) =>
+            {
+                Interlocked.Increment(ref sent);
+                return Task.CompletedTask;
+            },
+            NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+
+        Parallel.For(0, 400, index => source.Emit(Frame((uint)index, (ulong)index * 1_000_000)));
+        await WaitUntil(() => (int)streamer.FramesSent + (int)streamer.FramesDropped >= 400);
+
+        cancellation.Cancel();
+        await task;
+
+        Assert.Equal(400, (int)streamer.FramesSent + (int)streamer.FramesDropped);
+    }
+
+    [Fact]
+    public async Task StopAsync_IsIdempotent_AndCallbackDuringStopIsSafe()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(source, (_, _) => Task.CompletedTask, NullLogger.Instance);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var task = streamer.RunAsync(cancellation.Token);
+        await WaitUntil(() => source.Started);
+
+        await streamer.StopAsync();
+        await streamer.StopAsync();
+        source.Emit(Frame(1, 1));
+        cancellation.Cancel();
+        await task;
+
+        Assert.Equal(1, source.StopCount);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_IsIdempotent()
+    {
+        var source = new FakeSource();
+        var streamer = new FrameStreamer(source, (_, _) => Task.CompletedTask, NullLogger.Instance);
+
+        await streamer.DisposeAsync();
+        await streamer.DisposeAsync();
+
+        Assert.Equal(1, source.StopCount);
+    }
+
     private static async Task WaitUntil(Func<bool> condition, int timeoutMs = 3000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;

@@ -70,9 +70,13 @@ with wave.open(sys.argv[1], 'wb') as handle:
     $captureDll = Join-Path $root "services/audio-capture/bin/$Configuration/net10.0/audio-capture.dll"
     $gitSha = (git -C $root rev-parse HEAD 2>$null)
     if (-not $gitSha) { $gitSha = "unknown" }
+    $dirtyFiles = @(git -C $root status --porcelain 2>$null)
+    $gitDirty = $dirtyFiles.Count -gt 0
     $sidecarVersion = (dotnet $captureDll --version 2>$null)
     if (-not $sidecarVersion) { $sidecarVersion = "unknown" }
     $mode = if ($Simulated) { "simulated" } else { "wasapi-loopback" }
+    $sidecarSha256 = (Get-FileHash -Algorithm SHA256 $captureDll).Hash.ToLowerInvariant()
+    $stabilityScriptSha256 = (Get-FileHash -Algorithm SHA256 $PSCommandPath).Hash.ToLowerInvariant()
 
     if (-not $Simulated) {
         $devices = & dotnet $captureDll --list-devices | ConvertFrom-Json
@@ -186,7 +190,7 @@ with wave.open(sys.argv[1], 'wb') as handle:
     $frameOk = [Math]::Abs([int]$finalHealth.audio.frames - $theoreticalFrames) -le $frameTolerance
 
     $report = [pscustomobject]@{
-        result = if ($finalHealth.capture.state -eq "idle" -and $elapsedMinutes -ge $Minutes -and $sampleOk -and $gapOk -and $frameOk) { "PASS" } else { "FAIL" }
+        result = if ($gitDirty) { "NOT_REPRODUCIBLE" } elseif ($finalHealth.capture.state -eq "idle" -and $elapsedMinutes -ge $Minutes -and $sampleOk -and $gapOk -and $frameOk) { "PASS" } else { "FAIL" }
         expectedSamples = $expectedSamples
         maxSampleGapSeconds = $maxSampleGap
         sampleOk = $sampleOk
@@ -194,6 +198,13 @@ with wave.open(sys.argv[1], 'wb') as handle:
         frameOk = $frameOk
         frameTolerance = $frameTolerance
         gitSha = $gitSha
+        gitDirty = $gitDirty
+        dirtyFiles = $dirtyFiles
+        sidecarSha256 = $sidecarSha256
+        stabilityScriptSha256 = $stabilityScriptSha256
+        buildConfiguration = $Configuration
+        testMode = $mode
+        reproducibility = if ($gitDirty) { "NOT_REPRODUCIBLE" } else { "REPRODUCIBLE" }
         sidecarVersion = $sidecarVersion
         mode = $mode
         simulated = [bool]$Simulated

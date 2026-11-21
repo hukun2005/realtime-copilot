@@ -20,6 +20,23 @@ internal static class Program
             return 0;
         }
 
+        if (args.Contains("--probe-process-loopback"))
+        {
+            int? pid = null;
+            var pidIndex = Array.IndexOf(args, "--probe-process-loopback") + 1;
+            if (pidIndex < args.Length && int.TryParse(args[pidIndex], out var parsed))
+            {
+                pid = parsed;
+            }
+
+            var probe = Capture.ProcessLoopbackProbe.Probe(pid);
+            Console.Out.WriteLine(JsonSerializer.Serialize(probe, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            }));
+            return 0;
+        }
+
         if (args.Contains("--list-devices"))
         {
             var devices = Capture.DeviceCatalog.List();

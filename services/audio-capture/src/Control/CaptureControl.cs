@@ -208,9 +208,69 @@ public sealed class CaptureControl : IAsyncDisposable
         {
             _logger.LogError(exception, "capture failed: {Message}", exception.Message);
             var code = exception is CaptureFailedException failed ? failed.Code : "capture_failed";
+
+            // 默认设备模式且仍在采集中：尝试恢复；显式设备或用户已停止则直接报错。
+            if (code == "device_lost" && _deviceWatch is not null && !_deviceWatch.IsCancellationRequested)
+            {
+                await RecoverDefaultAsync(CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+
             await PublishAsync("error", mode, null, mode, exception.Message, code, CancellationToken.None).ConfigureAwait(false);
             _deviceWatch?.Cancel();
         }
+    }
+
+    private async Task RecoverDefaultAsync(CancellationToken cancellationToken)
+    {
+        await StopSessionsAsync().ConfigureAwait(false);
+        _logger.LogWarning("recovering default audio device");
+
+        for (var attempt = 1; attempt <= RecoveryPolicy.MaxAttempts; attempt++)
+        {
+            try
+            {
+                await PublishAsync(
+                    "starting",
+                    "loopback",
+                    DeviceCatalog.DefaultId(NAudio.CoreAudioApi.DataFlow.Render),
+                    "loopback",
+                    $"recovering audio device (attempt {attempt}/{RecoveryPolicy.MaxAttempts})",
+                    "recovering",
+                    cancellationToken).ConfigureAwait(false);
+
+                var source = new LoopbackCaptureSource(
+                    DeviceCatalog.Resolve(null, NAudio.CoreAudioApi.DataFlow.Render),
+                    _loggers.CreateLogger<LoopbackCaptureSource>());
+                StartSource(source, "loopback");
+                var session = _sessions[^1];
+                await session.Streamer.Started.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+
+                var recovered = DeviceCatalog.DefaultId(NAudio.CoreAudioApi.DataFlow.Render);
+                StartDeviceWatch(null);
+                await PublishAsync("capturing", "loopback", recovered, "loopback", null, null, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("audio device recovered: device={Device} attempt={Attempt}", recovered, attempt);
+                return;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "device recovery attempt {Attempt} failed", attempt);
+                await StopSessionsAsync().ConfigureAwait(false);
+                if (attempt < RecoveryPolicy.MaxAttempts)
+                {
+                    await Task.Delay(RecoveryPolicy.DelayFor(attempt), cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        await PublishAsync(
+            "error",
+            "loopback",
+            null,
+            "loopback",
+            "audio device recovery failed after 3 attempts",
+            "device_unavailable",
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task StopSessionsAsync()
@@ -240,31 +300,43 @@ public sealed class CaptureControl : IAsyncDisposable
     private void StartDeviceWatch(string? deviceId)
     {
         _deviceWatch?.Cancel();
-        if (deviceId is not null)
-        {
-            // 指定端点时不做默认设备轮询。
-            return;
-        }
 
         var baseline = DeviceCatalog.DefaultId(NAudio.CoreAudioApi.DataFlow.Render);
         var cancellation = new CancellationTokenSource();
         _deviceWatch = cancellation;
-        _ = WatchDeviceAsync(baseline, cancellation.Token);
+        _ = WatchDeviceAsync(deviceId, baseline, cancellation.Token);
     }
 
-    private async Task WatchDeviceAsync(string? baseline, CancellationToken cancellationToken)
+    private async Task WatchDeviceAsync(string? explicitDeviceId, string? baseline, CancellationToken cancellationToken)
     {
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+
+                if (explicitDeviceId is not null)
+                {
+                    try
+                    {
+                        _ = DeviceCatalog.Resolve(explicitDeviceId, NAudio.CoreAudioApi.DataFlow.Render);
+                        continue;
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        // 显式设备消失：提示用户，不静默切换成默认设备。
+                        _logger.LogError(exception, "explicit audio device disappeared: {Device}", explicitDeviceId);
+                        await PublishAsync("error", "loopback", explicitDeviceId, "loopback", "the selected audio device is no longer available", "device_lost", CancellationToken.None).ConfigureAwait(false);
+                        await StopAsync(CancellationToken.None).ConfigureAwait(false);
+                        return;
+                    }
+                }
+
                 var current = DeviceCatalog.DefaultId(NAudio.CoreAudioApi.DataFlow.Render);
                 if (!string.Equals(current, baseline, StringComparison.Ordinal))
                 {
                     _logger.LogWarning("default audio device changed during capture");
-                    await PublishAsync("error", "loopback", current, "loopback", "the default output device changed", "device_changed", CancellationToken.None).ConfigureAwait(false);
-                    await StopAsync(CancellationToken.None).ConfigureAwait(false);
+                    await RecoverDefaultAsync(cancellationToken).ConfigureAwait(false);
                     return;
                 }
             }

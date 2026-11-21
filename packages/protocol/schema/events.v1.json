@@ -1003,6 +1003,39 @@
             "null"
           ],
           "minimum": 0
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "capturing",
+            "device_lost",
+            "recovering",
+            "error",
+            null
+          ]
+        },
+        "deviceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recoveryAttempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errorCode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     }

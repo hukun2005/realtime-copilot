@@ -162,6 +162,10 @@ export interface AudioSourceStats {
   lastFrameTimestamp?: number | null
   currentSampleRate?: number | null
   currentChannels?: number | null
+  state?: 'capturing' | 'device_lost' | 'recovering' | 'error' | null
+  deviceId?: string | null
+  recoveryAttempts?: number
+  errorCode?: ErrorCode | null
 }
 export interface CaptureStartEvent {
   v: 1
