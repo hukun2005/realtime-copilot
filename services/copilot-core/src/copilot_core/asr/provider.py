@@ -62,6 +62,10 @@ class AsrProviderConfig:
     endpointing_ms: int | None = None
     punctuate: bool = True
     smart_format: bool = True
+    settle_timeout_seconds: float = 0.5
+    max_concurrent_connections: int = 2
+    max_retries: int = 2
+    backoff_base_seconds: float = 0.2
 
 
 class AsrProvider(Protocol):

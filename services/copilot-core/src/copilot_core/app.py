@@ -24,6 +24,7 @@ from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
 from .logging_setup import get_logger
+from .memory import process_memory
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
 from .storage import close, open_database
 from .tickets import TicketIssuer
@@ -168,11 +169,11 @@ def create_app(
             "audio": app.state.audio.snapshot(),
             "capture": controller.snapshot(),
             "asr": (
-                app.state.asr_coordinator.manager.snapshot()
+                app.state.asr_coordinator.snapshot()
                 if getattr(app.state, "asr_coordinator", None) is not None
-                and app.state.asr_coordinator.manager is not None
                 else None
             ),
+            "process": process_memory(),
             "database": "ok" if database_ok else "error",
             }
             return JSONResponse(body, status_code=200 if database_ok else 503)

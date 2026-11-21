@@ -272,6 +272,7 @@ class AsrPipeline:
             "framesDropped": self.stats.frames_dropped,
             "segmentsEmitted": self.stats.segments_emitted,
             "segmentsDropped": self.stats.segments_dropped,
+            "droppedSegments": self.stats.segments_dropped,
             "vadErrors": self.stats.vad_errors,
             "workerErrors": self.stats.worker_errors,
             "queueDepth": sum(queue.qsize() for queue in self._frame_queues.values()),

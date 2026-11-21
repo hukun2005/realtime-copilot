@@ -331,3 +331,17 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 5. 连续 5 个问题是否只有最后一个有完整答案？
 6. 退出应用后任务管理器是否有残留进程？
 7. 日志里是否出现密钥或转写正文？
+
+
+### P3.2.3 生命周期与 Deepgram 可靠性
+
+| 类别 | 断言 |
+|---|---|
+| 生命周期 | Start 阻塞时 Stop、Stop 后旧 Start 自毁、重复 Stop、shutdown 取消并 join |
+| Generation | 旧会话迟到的 Partial/Final 不广播 |
+| Provider 状态 | 只有验证连接成功才 READY；认证失败不重试；429/5xx 有限退避 |
+| URL | 标准编码；未知/空参数明确报错 |
+| Drain | 迟到有效文本累积；Metadata/关闭/超时结束；取消关闭 socket |
+| 指标 | 连接/重连/限流/超时计数与 activeWebSockets |
+
+30/60 分钟：**NOT_RUN**。

@@ -816,7 +816,68 @@ PCM processing 预算（2）。
 - 真实连接成功率、认证失败、断网重连、识别质量（WER）、延迟分布、成本：
   **NOT_VERIFIED / NOT_RUN**。
 
+## 2026-11-21 · P3.2.3：ASR 生命周期竞态与 Deepgram 可靠性
+
+分支：`feature/p3-2-3-asr-lifecycle-hardening`（基线 `3697b44`）。
+
+### 生命周期时序
+
+```
+capture.start(N)
+  → controller._notify_asr_start(N) [task]
+    → coordinator.start(N): epoch+1, generation=N, 创建 Manager（锁外连接）
+      → manager.start(): 票据 → provider.connect()（验证 socket）→ READY
+capture.stop()
+  → controller._notify_asr_stop() [task，排在 start 之后]
+    → coordinator.stop(): epoch+1, generation=0, manager.stop()
+      → 取消消费者 → provider.close() → IDLE
+  → start 返回后校验 epoch/generation：已过期则立即 manager.stop()（幂等）
+```
+
+- Controller 用任务集合跟踪 ASR 生命周期；shutdown 禁止新 start 并 join 全部任务。
+- Coordinator 用 epoch + generation 双校验；stop 不等待正在进行的连接，但旧 start 完成后必定自毁。
+- `AsrCoordinator.shutdown()` 取消并等待所有生命周期任务，关闭 Manager 与 Provider。
+
+### Deepgram 状态与连接
+
+- 状态：IDLE → CONNECTING →（轻量验证 socket 成功）→ READY；失败 → ERROR；close 幂等。
+- 验证连接失败不会报告 READY；认证失败（401/403）不重试。
+- 429/5xx 使用有限指数退避 + 抖动（最多 `max_retries` 次），不阻塞采集主循环。
+- 连接/段/重连/限流/超时/Provider 错误均有计数，`/healthz.asr.metrics` 可查。
+
+### Drain 修复
+
+- `speech_final` 后进入 settle 窗口，继续解析迟到消息并累积有效 `is_final` 文本，
+  Metadata/关闭/settle 超时后只产出一个 final；不再丢弃消息。
+- 总结束等待有上限（`settle_timeout_seconds`，默认 0.5s）；取消会关闭 socket。
+
+### 内存与观测
+
+- PCM 预算区分 queued / processing / in-flight / peak（单元测试覆盖）；不代表进程内存。
+- 新增 `memory.process_memory()`（Windows WorkingSet/PrivateBytes）并挂到 `/healthz.process`。
+- ASR 快照包含 `activeTasks` 与 Provider 指标（含 activeWebSockets）。
+- 新增 `scripts/asr_soak_impl.py`（模拟 VAD soak，输出 PCM 与进程内存）；**本 PR 未运行 30/60 分钟**。
+
+### 测试
+
+新增 21 个：生命周期竞态 8、Deepgram 状态/URL/Drain/指标 12、进程内存 1。
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **310 passed, 3 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed |
+| `pnpm -C packages/protocol test` | 26 passed |
+| `pnpm -C apps/desktop test` | 11 passed |
+| `pnpm -r --if-present run typecheck` | 通过 |
+
+### 未完成
+
+- 30/60 分钟真实 WASAPI / Deepgram 联合测试：**NOT_RUN**。
+- 真实 API Key 验证：**SKIP**（本机无 Key）。
+- 持续实时流式 ASR（P3.3）：未开始。
+
 ### 变更记录
+
 
 
 
@@ -835,5 +896,6 @@ PCM processing 预算（2）。
 | 2026-11-21 | P3.2：ASR Provider 抽象、Manager、票据校验、事件广播与 Deepgram 适配器（未验证） |
 | 2026-11-21 | P3.2.1：Deepgram final 累积、revision、会话级 Manager、generation 隔离与 PCM lease |
 | 2026-11-21 | P3.2.2：Deepgram 参数核对、真实 API 自检脚本（本机 SKIP）与文档状态统一 |
+| 2026-11-21 | P3.2.3：生命周期竞态、Deepgram READY/Drain/重试、进程内存观测 |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
