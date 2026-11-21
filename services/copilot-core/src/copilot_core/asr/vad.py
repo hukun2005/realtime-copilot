@@ -13,10 +13,12 @@
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
+
+from ..pcm_level import peak_dbfs as pcm_peak_dbfs
+from ..pcm_level import rms_dbfs as pcm_rms_dbfs
 
 SOURCE_LOOPBACK = "loopback"
 SOURCE_MIC = "mic"
@@ -74,17 +76,78 @@ class VadEvent:
 
 
 class EnergyVad:
-    """按 dBFS 阈值判断当前帧是否语音。"""
+    """Peak + RMS 双指标能量 VAD，带噪声估计与起止滞回。
 
-    def __init__(self, *, threshold_dbfs: float = -50.0) -> None:
+    - 起始判定使用 ``threshold_dbfs``；已激活时使用滞回后的更低阈值。
+    - RMS 低于 ``rms_threshold_dbfs`` 的短促峰值视为冲击噪声，不当作语音。
+    - 背景噪声用指数滑动平均估计，可选地把阈值抬到噪声底之上。
+    """
+
+    def __init__(
+        self,
+        *,
+        threshold_dbfs: float = -50.0,
+        rms_threshold_dbfs: float = -55.0,
+        hysteresis_db: float = 6.0,
+        noise_floor_dbfs: float = -75.0,
+        adaptive_margin_db: float = 8.0,
+        adaptive: bool = True,
+    ) -> None:
         self._threshold = threshold_dbfs
+        self._rms_threshold = rms_threshold_dbfs
+        self._hysteresis = hysteresis_db
+        self._noise_floor = noise_floor_dbfs
+        self._adaptive_margin = adaptive_margin_db
+        self._adaptive = adaptive
+        self._noise_alpha = 0.05
+        self.noise_triggers = 0
 
     @property
     def threshold_dbfs(self) -> float:
         return self._threshold
 
-    def is_speech(self, dbfs: float | None) -> bool:
-        return dbfs is not None and dbfs >= self._threshold
+    @property
+    def noise_floor_dbfs(self) -> float:
+        return self._noise_floor
+
+    @property
+    def noise_triggered(self) -> int:
+        return self.noise_triggers
+
+    def current_threshold(self) -> float:
+        """当前起始阈值；自适应时不低于噪声底 + 余量。"""
+        if not self._adaptive:
+            return self._threshold
+        return max(self._threshold, self._noise_floor + self._adaptive_margin)
+
+    def is_speech(
+        self,
+        peak_dbfs: float | None,
+        rms_dbfs: float | None = None,
+        *,
+        active: bool = False,
+    ) -> bool:
+        """判断一帧是否语音。
+
+        ``active=True`` 表示片段已开始，使用滞回后的阈值以避免抖动。
+        """
+        if peak_dbfs is None:
+            return False
+        threshold = self.current_threshold()
+        if active:
+            threshold -= self._hysteresis
+        if peak_dbfs < threshold:
+            return False
+        if rms_dbfs is not None and rms_dbfs < self._rms_threshold:
+            self.noise_triggers += 1
+            return False
+        return True
+
+    def observe(self, peak_dbfs: float | None, speech: bool) -> None:
+        """用非语音帧更新背景噪声估计。"""
+        if peak_dbfs is None or speech or peak_dbfs < -120:
+            return
+        self._noise_floor = (1 - self._noise_alpha) * self._noise_floor + self._noise_alpha * peak_dbfs
 
 
 @dataclass
@@ -144,6 +207,13 @@ class Segmenter:
     def threshold_dbfs(self) -> float:
         return self._vad.threshold_dbfs
 
+    @property
+    def noise_triggers(self) -> int:
+        return self._vad.noise_triggered
+
+    def current_threshold(self) -> float:
+        return self._vad.current_threshold()
+
     def ring_evictions(self, source: str) -> int:
         return self._state(source).ring_evictions
 
@@ -166,7 +236,8 @@ class Segmenter:
             state.ring_evictions += 1
         state.ring.append(frame)
 
-        speech = self._vad.is_speech(frame.peak_dbfs)
+        speech = self._vad.is_speech(frame.peak_dbfs, frame.rms_dbfs, active=state.current.active)
+        self._vad.observe(frame.peak_dbfs, speech)
         events: list[VadEvent] = []
         already_included = False
 
@@ -250,9 +321,10 @@ class Segmenter:
         kept = current.frames[: current.last_speech_index + 1]
         if not kept:
             kept = current.frames[-1:]
-        peak = max(frame.peak_dbfs for frame in kept)
-        mean_energy = current.energy_sum / len(current.frames) if current.frames else 0.0
-        rms = 10 * math.log10(mean_energy) if mean_energy > 0 else -120.0
+        pcm = b"".join(frame.pcm16 for frame in kept)
+        # Peak / RMS 都基于最终 PCM，口径与采集侧电平统计一致。
+        peak = pcm_peak_dbfs(pcm)
+        rms = pcm_rms_dbfs(pcm)
         segment = SpeechSegment(
             segment_id=f"seg_{source}_{current.segment_index}",
             source=source,

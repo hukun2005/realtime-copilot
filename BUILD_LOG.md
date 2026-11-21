@@ -627,6 +627,56 @@ NAudio 是否暴露 process-loopback API、目标 PID 是否有效；子进程/�
 - Silero VAD、ASR 延迟评测。
 - 真实会议音频 fixture（按要求不入库）。
 
+## 2026-11-21 · P3.1.1：VAD 质量与内存加固
+
+分支：`feature/p3-1-1-vad-hardening`（基线 `90a6339`）。
+
+### PCM 统计口径（A1）
+
+- `Segmenter._finish_segment` 的 peak / RMS 改为直接基于最终 `pcm16`（`copilot_core.pcm_level`），
+  与采集侧电平定义一致；结束静音不进入最终 PCM，仍记录 `endSilenceMs`。
+
+### Energy VAD（A2）
+
+- Peak + RMS 双指标；RMS 过低但峰值高的帧计为 `noise_triggers`，不当作语音。
+- 背景噪声 EMA 估计与自适应阈值（噪声底 + 余量），可关闭。
+- 起止滞回：激活后阈值降低 `hysteresis_db`，避免抖动。
+- 旧构造参数 `threshold_dbfs` 与 `is_speech(dbfs)` 保持兼容。
+
+### Provider 抽象（A3）
+
+- `VadProvider` 协议 + `EnergyVadProvider`（默认）；`WebRtcVadProvider` 依赖可选 `webrtcvad`，
+  未安装时抛 `VadUnavailable`，不影响默认路径；Silero 只保留扩展位置。
+
+### PCM 预算与生命周期（A4/A5）
+
+- `AsrPipeline` 新增：`maxSegmentBytes`、`maxPcmBytesInFlight`（默认 32 MiB）、
+  `maxSegmentDurationMs`，以及 `pcmBytesInFlight` / `peakPcmBytesInFlight` /
+  `pcmBytesDropped` / `pcmBytesReleased` 统计。
+- 单段超限、全局预算超限、队列满三种情况均确定性丢弃并计数。
+- `next_segment` / `get_segment` 取出即释放预算；`stop_immediate` / `close` 清空并释放全部 PCM。
+- 生命周期：`start` / `stop_graceful` / `stop_immediate` / `close`；幂等、取消全部 worker、
+  无后台 Task 残留；worker 异常计入 `workerErrors` 并通过 healthz 暴露。
+- `/healthz.audio.vad` 输出上述计数。
+
+### 测试
+
+新增 14 个：PCM 口径、低音量、冲击噪声、稳态噪声、RMS 拒绝、滞回、Provider 包装、
+WebRTC 不可用、单段预算、全局预算、消费释放、优雅停止、立即停止、close 幂等。
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **256 passed, 1 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed（本轮未改 C#） |
+| `pnpm -C packages/protocol test` | 26 passed |
+
+### 未完成的长时间测试（A6）
+
+- 30 分钟模拟、30 分钟真实 WASAPI、60 分钟真实 WASAPI、真实双来源并行：
+  **本轮未执行**，不标记通过。
+- 队列满载、ASR 消费不足、取消、设备断开由单元测试覆盖，未做长时间 soak。
+
 ### 变更记录
 
 | 日期 | 变更 |
@@ -640,5 +690,6 @@ NAudio 是否暴露 process-loopback API、目标 PID 是否有效；子进程/�
 | 2026-11-21 | P2-C.2：锁外 spawn、会话任务绑定、disconnect 竞态与票据边界加固 |
 | 2026-11-21 | P3：ASR 协议冻结、票据 purpose、ASR 状态分离与能量 VAD |
 | 2026-11-21 | P3.1：完整 PCM Ring Buffer、VAD 运行时流水线与有界 ASR 队列 |
+| 2026-11-21 | P3.1.1：PCM 口径、双指标 VAD、Provider 抽象、PCM 预算与生命周期 |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |

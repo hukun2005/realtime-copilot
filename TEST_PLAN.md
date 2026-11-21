@@ -200,6 +200,16 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 | ASR 队列 | 帧队列与 Segment 队列均有界；满时计数丢弃；stop 时 flush；VAD 异常不断采集 |
 | 真实 PCM | `fixtures/vad-sample.wav` 合成音频产出片段，PCM 与输入一致 |
 
+### P3.1.1 加固
+
+| 类别 | 断言 |
+|---|---|
+| PCM 口径 | peak/RMS 基于最终 PCM；结束静音不计入；`endSilenceMs` 单独记录 |
+| Energy VAD | Peak+RMS、噪声底 EMA、自适应阈值、起止滞回、噪声触发计数 |
+| Provider | `EnergyVadProvider` 包装；`WebRtcVadProvider` 缺依赖时 `VadUnavailable` |
+| PCM 预算 | 单段/全局预算超限丢弃并计数；消费释放；close 清空 |
+| 生命周期 | start/stop_graceful/stop_immediate/close 幂等、无 Task 残留、worker 异常可观察 |
+
 说明：本轮不包含真实 ASR provider、转写装配与延迟评测。
 
 ## 5B. 音频可靠性（P2-D）
