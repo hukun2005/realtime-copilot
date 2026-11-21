@@ -168,6 +168,16 @@ CPU 型号与核数、内存、Windows 版本与 build、是否插电/节能模�
 
 这些测试断言真实副作用（spawn 次数、`terminate_calls`、票据有效性、后台 Task、连接引用），不只比较状态字符串。
 
+### 控制面最终加固（P2-C.2）
+
+| 类别 | 断言 |
+|---|---|
+| spawn 窗口 | 锁外创建进程：stop/shutdown 在 spawn 期间发生时，新进程被立即终止；spawn 完成时会话已失效则不登记为当前会话 |
+| 任务归属 | 每个会话持有 timeout/watch/control 任务；旧会话任务在清理时结束且不影响新会话任务；shutdown 取消全部会话任务；不取消当前任务 |
+| disconnect 竞态 | 同一锁内取会话/状态快照；capturing 意外断连进 ERROR，stopping 断连按正常结束回 IDLE；disconnect 与 stop 并发不误报异常；disconnect 与进程退出并发只终止一次 |
+| 票据边界 | 到期瞬间即失效；到期前 1 秒仍有效；超长输入（>512）、非法 Base64、非法 JSON、旧/已结束会话、重放均拒绝且不泄露签名或 secret |
+| 失败清理 | spawn 失败进入 ERROR(sidecar_unavailable)，无进程、无票据、无残留任务 |
+
 **CI 限制**：托管 Windows runner 没有音频端点，控制面 E2E 在 CI 用 -Simulated（sidecar 用静音帧源）
 验证真实的跨进程控制与二进制帧链路；真实 WASAPI 采集的 E2E 只能在本机运行，结果记录在 BUILD_LOG.md。
 

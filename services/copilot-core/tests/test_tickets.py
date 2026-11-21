@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+
 import pytest
-from copilot_core.tickets import TicketIssuer, TicketRejection
+from copilot_core.tickets import MAX_TICKET_LENGTH, TicketIssuer, TicketRejection
 
 
 class FakeClock:
@@ -95,3 +99,91 @@ def test_required_flag_tracks_session() -> None:
     assert issuer.required is True
     issuer.end_session()
     assert issuer.required is False
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def test_exact_expiry_instant_is_rejected() -> None:
+    clock = FakeClock()
+    issuer = TicketIssuer(ttl_seconds=60, now=clock)  # type: ignore[arg-type]
+    issuer.begin_session()
+    ticket = issuer.issue()
+
+    clock.advance(60)
+
+    check = issuer.consume(ticket)
+    assert not check.ok
+    assert check.reason is TicketRejection.EXPIRED
+
+
+def test_ticket_valid_one_second_before_expiry() -> None:
+    clock = FakeClock()
+    issuer = TicketIssuer(ttl_seconds=60, now=clock)  # type: ignore[arg-type]
+    issuer.begin_session()
+    ticket = issuer.issue()
+
+    clock.advance(59)
+
+    assert issuer.consume(ticket).ok
+
+
+def test_oversized_input_is_rejected_without_parsing() -> None:
+    issuer, _ = make_issuer()
+    oversized = "a" * (MAX_TICKET_LENGTH + 1)
+
+    check = issuer.consume(oversized)
+    assert not check.ok
+    assert check.reason is TicketRejection.MALFORMED
+
+
+@pytest.mark.parametrize("value", ["!!!.???", "not-base64.signature", "a.b.c"])
+def test_malformed_base64_is_rejected(value: str) -> None:
+    issuer, _ = make_issuer()
+    check = issuer.consume(value)
+    assert not check.ok
+    assert check.reason is TicketRejection.MALFORMED
+
+
+def test_malformed_json_with_valid_signature_is_rejected() -> None:
+    issuer, _ = make_issuer()
+    body = b"this is not json"
+    signature = hmac.new(issuer._secret, body, hashlib.sha256).digest()
+    value = f"{_b64(body)}.{_b64(signature)}"
+
+    check = issuer.consume(value)
+    assert not check.ok
+    assert check.reason is TicketRejection.MALFORMED
+
+
+def test_ticket_from_ended_session_is_rejected() -> None:
+    issuer, _ = make_issuer()
+    ticket = issuer.issue()
+    issuer.end_session()
+
+    check = issuer.consume(ticket)
+    assert not check.ok
+    assert check.reason is TicketRejection.WRONG_SESSION
+
+
+def test_new_session_cannot_consume_old_ticket() -> None:
+    issuer, _ = make_issuer()
+    old = issuer.issue()
+    issuer.begin_session()
+    current = issuer.issue()
+
+    assert issuer.consume(old).reason is TicketRejection.WRONG_SESSION
+    assert issuer.consume(current).ok
+
+
+def test_rejection_does_not_expose_signature_or_secret() -> None:
+    issuer, _ = make_issuer()
+    ticket = issuer.issue()
+    body, signature = ticket.split(".", 1)
+
+    check = issuer.consume(f"{body}.{signature[:-2]}AA")
+    assert not check.ok
+    assert check.reason is TicketRejection.BAD_SIGNATURE
+    assert signature not in repr(check)
+    assert issuer._secret.hex() not in repr(check)

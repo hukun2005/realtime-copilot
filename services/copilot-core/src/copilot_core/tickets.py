@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -14,6 +15,9 @@ import secrets
 import time
 from dataclasses import dataclass
 from enum import StrEnum
+
+#: 票据最大长度；超长输入直接拒绝，避免解析开销与异常放大。
+MAX_TICKET_LENGTH = 512
 
 
 class TicketRejection(StrEnum):
@@ -79,13 +83,13 @@ class TicketIssuer:
 
     def consume(self, value: str | None) -> TicketCheck:
         """校验并消费一张票据（成功即失效）。"""
-        if not value:
+        if not value or len(value) > MAX_TICKET_LENGTH:
             return TicketCheck(False, TicketRejection.MALFORMED)
         try:
             body_part, signature_part = value.split(".", 1)
             body = _unb64(body_part)
             signature = _unb64(signature_part)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, binascii.Error):
             return TicketCheck(False, TicketRejection.MALFORMED)
 
         expected = hmac.new(self._secret, body, hashlib.sha256).digest()
@@ -107,7 +111,7 @@ class TicketIssuer:
             return TicketCheck(False, TicketRejection.WRONG_SESSION)
         if nonce in self._used:
             return TicketCheck(False, TicketRejection.REPLAYED)
-        if self._now() > expiry:
+        if self._now() >= expiry:
             return TicketCheck(False, TicketRejection.EXPIRED)
 
         self._used.add(nonce)
@@ -120,4 +124,5 @@ def _b64(data: bytes) -> str:
 
 def _unb64(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(value + padding)
+    # validate=True：非法字符/长度直接抛 binascii.Error，而不是静默解码成空字节。
+    return base64.b64decode(value + padding, altchars=b"-_", validate=True)
