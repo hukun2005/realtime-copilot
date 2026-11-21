@@ -779,7 +779,45 @@ PCM processing 预算（2）。
 
 真实 Deepgram 连接与识别验证不在本 PR（PR B）；30/60 分钟长稳未执行。
 
+## 2026-11-21 · P3.2.2：Deepgram 真实识别验证
+
+分支：`feature/p3-2-2-deepgram-validation`（基线 `0351e14`）。
+
+### 官方接口核对
+
+- 参考：https://developers.deepgram.com/reference/speech-to-text/listen-streaming
+  与 https://developers.deepgram.com/docs/understand-endpointing-interim-results
+- 参数：`model`（示例 `nova-3`）、`language`、`encoding=linear16`、`sample_rate`、`channels`、
+  `interim_results`、`endpointing`（毫秒，触发 `speech_final`）、`punctuate`、`smart_format`、
+  `CloseStream`。全部可通过 `AsrProviderConfig` / `options` 配置。
+- `is_final` 表示文本块定稿；`speech_final` 表示 utterance 结束（与 P3.2.1 实现一致）。
+
+### 输入校验
+
+- 仅接受 PCM16LE / 16000Hz / Mono；采样率或声道不符返回 `asr_invalid_audio`。
+- 空 PCM 返回 `asr_invalid_audio`；连接/接收超时可配置。
+- API Key 仅从 `DEEPGRAM_API_KEY` 读取，不写入日志、不进入仓库。
+
+### 真实 API 测试
+
+- `scripts/asr-live-check.ps1` + `scripts/asr_live_check_impl.py`：本地合成 2 秒 PCM，
+  有 Key 时执行一次 Segment 识别并输出 partial/final 与延迟；无 Key 输出 SKIP。
+- 本机执行结果：**SKIP**（`DEEPGRAM_API_KEY is not set`）。
+- `tests/test_deepgram_live.py`：缺少 Key 时整体 skip；本机未执行真实断言。
+
+### 30 分钟联合测试
+
+- 模拟音频 + VAD、真实 WASAPI + VAD、真实 WASAPI + Deepgram、双来源并行：
+  **NOT_RUN**（无 API Key，且本轮未安排长跑）。
+- 未用 Mock 结果冒充真实识别。
+
+### 未解决
+
+- 真实连接成功率、认证失败、断网重连、识别质量（WER）、延迟分布、成本：
+  **NOT_VERIFIED / NOT_RUN**。
+
 ### 变更记录
+
 
 
 | 日期 | 变更 |
@@ -796,5 +834,6 @@ PCM processing 预算（2）。
 | 2026-11-21 | P3.1.1：PCM 口径、双指标 VAD、Provider 抽象、PCM 预算与生命周期 |
 | 2026-11-21 | P3.2：ASR Provider 抽象、Manager、票据校验、事件广播与 Deepgram 适配器（未验证） |
 | 2026-11-21 | P3.2.1：Deepgram final 累积、revision、会话级 Manager、generation 隔离与 PCM lease |
+| 2026-11-21 | P3.2.2：Deepgram 参数核对、真实 API 自检脚本（本机 SKIP）与文档状态统一 |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
