@@ -876,7 +876,49 @@ capture.stop()
 - 真实 API Key 验证：**SKIP**（本机无 Key）。
 - 持续实时流式 ASR（P3.3）：未开始。
 
+## 2026-11-21 · P3.2.4：阿里云百炼 Paraformer 实时 ASR 接入
+
+分支：`feature/p3-2-4-aliyun-paraformer`（基线 `d68cfc9`）。
+
+### Provider
+
+- 新增 `DashScopeParaformerProvider`：百炼 Paraformer 实时 WebSocket，
+  `wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference`。
+- 协议：`run-task` → 二进制 PCM → `finish-task`；解析 `result-generated.sentence`，
+  `sentence_end=false` 为 partial，`true` 为 final。
+- `connect()` 用 100ms 静音做真实握手验证，成功后才 READY；401/403 映射认证失败。
+- 注册名 `aliyun`；配置：`RTC_ASR_PROVIDER=aliyun`、`DASHSCOPE_API_KEY`、
+  `DASHSCOPE_WORKSPACE_ID`、可选 `RTC_ASR_MODEL`。
+
+### 真实 API 验证
+
+- 本机 Key + `ws-l262igu3wrsns7ns` 业务空间，`paraformer-realtime-v2`。
+- `scripts/aliyun-live-check.ps1` 结果：**PASS**（连接 1330ms，9.26s 音频，15 partial / 2 final）。
+- 识别文本：
+  - final 1：`大家好，这是一次实时语音识别的测试。`
+  - final 2：`今天讨论五三和TypeScript的接口设计。`
+- 已知识别误差：`Vue3` → `53/五三`，`TypeScript` → `type escript`（模型对中英混合技术词有限制）。
+- 测试音频为 Windows 中文 TTS 合成，**非会议录音**。
+
+### 测试
+
+| 命令 | 结果 |
+|---|---|
+| `uv run pytest -q` | **318 passed, 3 skipped** |
+| `uv run ruff check .` | All checks passed |
+| `dotnet test services/audio-capture/tests -c Release` | 91 passed |
+| `pnpm -C packages/protocol test` | 26 passed |
+| `pnpm -C apps/desktop test` | 11 passed |
+| `pnpm -r --if-present run typecheck` | 通过 |
+
+### 未完成
+
+- 30 分钟真实 WASAPI + Paraformer 联合测试：**NOT_RUN**。
+- 真实会议音频、WER、P95 延迟未测。
+- 热词/自定义词汇表未接入（可改善 Vue3/TypeScript 识别）。
+
 ### 变更记录
+
 
 
 
@@ -897,5 +939,6 @@ capture.stop()
 | 2026-11-21 | P3.2.1：Deepgram final 累积、revision、会话级 Manager、generation 隔离与 PCM lease |
 | 2026-11-21 | P3.2.2：Deepgram 参数核对、真实 API 自检脚本（本机 SKIP）与文档状态统一 |
 | 2026-11-21 | P3.2.3：生命周期竞态、Deepgram READY/Drain/重试、进程内存观测 |
+| 2026-11-21 | P3.2.4：阿里云 Paraformer 实时 ASR Provider，真实 API PASS |
 | 2026-11-21 | P2-D：按来源统计、Channel 并发、30 分钟模拟/真实稳定性 |
 | 2026-11-21 | P2-D.1：设备恢复策略、FrameStreamer 清理、稳定性可信度与 loopback 探测 |
