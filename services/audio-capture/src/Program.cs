@@ -122,12 +122,7 @@ internal static class Program
         ILogger logger,
         CancellationToken shutdownToken)
     {
-        using var duration = simulation.Duration > TimeSpan.Zero
-            ? new CancellationTokenSource(simulation.Duration)
-            : null;
-        using var linked = duration is null
-            ? CancellationTokenSource.CreateLinkedTokenSource(shutdownToken)
-            : CancellationTokenSource.CreateLinkedTokenSource(shutdownToken, duration.Token);
+        var clientTask = client.RunAsync(shutdownToken);
 
         var streamer = new AudioStreamer(
             client.SendBinaryAsync,
@@ -144,14 +139,19 @@ internal static class Program
 
         try
         {
-            await Task.WhenAll(
-                streamer.RunAsync(linked.Token),
-                client.RunAsync(linked.Token)).ConfigureAwait(false);
+            var duration = simulation.Duration > TimeSpan.Zero ? simulation.Duration : (TimeSpan?)null;
+            await streamer.RunAsync(shutdownToken, duration).ConfigureAwait(false);
+            await client.CloseAsync(CancellationToken.None).ConfigureAwait(false);
+            await clientTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
         catch (CoreConnectionException exception)
         {
             logger.LogError("audio send failed: {Code}: {Message}", exception.Code, exception.Message);
             return 4;
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            // 外部停止：属于正常结束。
         }
 
         logger.LogInformation("simulation finished: sent={Sent} skipped={Skipped}", streamer.FramesSent, streamer.FramesSkipped);

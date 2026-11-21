@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "type": "asr.partial",
+  "eventId": "evt_01JAY0000000000000000000H",
+  "ts": 1763700001200,
+  "payload": {
+    "segmentId": "seg_01JAY00000000000000000001",
+    "source": "loopback",
+    "startTsNs": 1763700000000000000,
+    "endTsNs": 1763700001200000000,
+    "revision": 1,
+    "text": "我们开始今天的会议",
+    "confidence": 0.82,
+    "provider": "deepseek",
+    "language": "zh"
+  }
+}

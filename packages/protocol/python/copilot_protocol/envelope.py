@@ -14,6 +14,10 @@ from typing import Any, TypeAlias
 from pydantic import BaseModel, ValidationError
 
 from .models import (
+    AsrErrorEvent,
+    AsrFinalEvent,
+    AsrPartialEvent,
+    AsrStatusEvent,
     AudioStatusEvent,
     AudioStatusPayload,
     CaptureStartEvent,
@@ -41,6 +45,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "audio.status",
     "capture.start",
     "capture.stop",
+    "asr.status",
+    "asr.partial",
+    "asr.final",
+    "asr.error",
 )
 
 ConcreteEvent: TypeAlias = (
@@ -243,6 +251,87 @@ def make_audio_status(
             error_code=error_code,
         ),
     )
+
+def make_asr_status(
+    *,
+    state: str,
+    since: int,
+    provider: str | None = None,
+    error_code: str | None = None,
+    error: str | None = None,
+) -> AsrStatusEvent:
+    """构造 ``asr.status`` 事件；与采集状态相互独立。"""
+    return AsrStatusEvent(
+        v=PROTOCOL_VERSION,
+        type="asr.status",
+        event_id=new_event_id(),
+        ts=now_ms(),
+        payload={
+            "state": state,
+            "since": since,
+            "provider": provider,
+            "errorCode": error_code,
+            "error": error,
+        },
+    )
+
+
+def make_asr_result(
+    event_type: str,
+    *,
+    segment_id: str,
+    source: str,
+    start_ts_ns: int,
+    end_ts_ns: int,
+    revision: int,
+    text: str,
+    confidence: float | None = None,
+    provider: str | None = None,
+    language: str | None = None,
+) -> AsrPartialEvent | AsrFinalEvent:
+    """构造 ``asr.partial`` / ``asr.final``；两者共用 segmentId 与采集时间轴。"""
+    payload = {
+        "segmentId": segment_id,
+        "source": source,
+        "startTsNs": start_ts_ns,
+        "endTsNs": end_ts_ns,
+        "revision": revision,
+        "text": text,
+        "confidence": confidence,
+        "provider": provider,
+        "language": language,
+    }
+    model = AsrPartialEvent if event_type == "asr.partial" else AsrFinalEvent
+    return model(
+        v=PROTOCOL_VERSION,
+        type=event_type,
+        event_id=new_event_id(),
+        ts=now_ms(),
+        payload=payload,
+    )
+
+
+def make_asr_error(
+    *,
+    code: str,
+    message: str,
+    retryable: bool = False,
+    segment_id: str | None = None,
+) -> AsrErrorEvent:
+    """构造 ``asr.error``；不包含识别正文或密钥。"""
+    return AsrErrorEvent(
+        v=PROTOCOL_VERSION,
+        type="asr.error",
+        event_id=new_event_id(),
+        ts=now_ms(),
+        payload={
+            "code": code,
+            "message": message,
+            "segmentId": segment_id,
+            "retryable": retryable,
+        },
+    )
+
 
 def make_event(event_type: str, payload: dict[str, Any], request_id: str | None = None) -> EventV1:
     """按协议构造任意事件并做一次结构校验。

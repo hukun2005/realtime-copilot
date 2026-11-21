@@ -25,6 +25,10 @@ export const EVENT_TYPES = [
   'audio.status',
   'capture.start',
   'capture.stop',
+  'asr.status',
+  'asr.partial',
+  'asr.final',
+  'asr.error',
 ] as const
 
 /** 事件类型别名。 */

@@ -17,6 +17,10 @@ export type EventV1 =
   | AudioStatusEvent
   | CaptureStartEvent
   | CaptureStopEvent
+  | AsrStatusEvent
+  | AsrPartialEvent
+  | AsrFinalEvent
+  | AsrErrorEvent
 /**
  * 事件唯一标识；由发送方生成，接收方只用于日志与关联，不承担幂等语义。
  */
@@ -47,6 +51,22 @@ export type ErrorCode =
   | 'capture_timeout'
   | 'sidecar_unavailable'
   | 'ticket_invalid'
+  | 'asr_failed'
+  | 'asr_timeout'
+  | 'asr_unavailable'
+  | 'asr_segment_conflict'
+/**
+ * ASR 连接状态；与采集状态机完全独立。
+ */
+export type AsrState = 'idle' | 'connecting' | 'ready' | 'error'
+/**
+ * 识别片段 ID；partial 与 final 共用同一 ID。
+ */
+export type AsrSegmentId = string
+/**
+ * 识别来源；与采集来源枚举保持一致，但独立演进。
+ */
+export type AsrSource = 'loopback' | 'mic'
 
 export interface HelloEvent {
   v: 1
@@ -156,3 +176,82 @@ export interface CaptureStopEvent {
   payload: CaptureStopPayload
 }
 export interface CaptureStopPayload {}
+export interface AsrStatusEvent {
+  v: 1
+  type: 'asr.status'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: AsrStatusPayload
+}
+export interface AsrStatusPayload {
+  state: AsrState
+  since: number
+  provider?: string | null
+  errorCode?: ErrorCode | null
+  error?: string | null
+}
+export interface AsrPartialEvent {
+  v: 1
+  type: 'asr.partial'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: AsrPartialPayload
+}
+export interface AsrPartialPayload {
+  segmentId: AsrSegmentId
+  source: AsrSource
+  /**
+   * 采集时间轴起点（纳秒）。
+   */
+  startTsNs: number
+  /**
+   * 采集时间轴终点（纳秒）。
+   */
+  endTsNs: number
+  revision: number
+  text: string
+  confidence?: number | null
+  provider?: string | null
+  language?: string | null
+}
+export interface AsrFinalEvent {
+  v: 1
+  type: 'asr.final'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: AsrFinalPayload
+}
+export interface AsrFinalPayload {
+  segmentId: AsrSegmentId
+  source: AsrSource
+  /**
+   * 采集时间轴起点（纳秒）。
+   */
+  startTsNs: number
+  /**
+   * 采集时间轴终点（纳秒）。
+   */
+  endTsNs: number
+  revision: number
+  text: string
+  confidence?: number | null
+  provider?: string | null
+  language?: string | null
+}
+export interface AsrErrorEvent {
+  v: 1
+  type: 'asr.error'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: AsrErrorPayload
+}
+export interface AsrErrorPayload {
+  code: ErrorCode
+  message: string
+  segmentId?: AsrSegmentId | null
+  retryable: boolean
+}

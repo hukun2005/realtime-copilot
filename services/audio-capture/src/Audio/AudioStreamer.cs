@@ -53,17 +53,23 @@ public sealed class AudioStreamer
     /// <summary>主动跳过的帧数（序号仍然递增，制造可检测的空洞）。</summary>
     public uint FramesSkipped { get; private set; }
 
-    /// <summary>按帧率持续发送，直到取消。</summary>
+    /// <summary>按帧率持续发送，直到取消或达到时长。</summary>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>取消时完成的任务。</returns>
-    public async Task RunAsync(CancellationToken cancellationToken)
+    /// <param name="duration">可选的发送时长；到点后正常退出，不在发送中途取消。</param>
+    /// <returns>取消或到时完成的任务。</returns>
+    public async Task RunAsync(CancellationToken cancellationToken, TimeSpan? duration = null)
     {
         var interval = TimeSpan.FromSeconds(1.0 / _framesPerSecond);
         var deadline = Stopwatch.GetTimestamp();
+        var started = deadline;
         var generated = 0L;
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            if (duration is not null && Stopwatch.GetElapsedTime(started) >= duration.Value)
+            {
+                break;
+            }
             generated++;
             var frame = _source.Next(_timestamp());
             var shouldDrop = _dropEvery > 0 && generated % _dropEvery == 0;
@@ -75,7 +81,16 @@ public sealed class AudioStreamer
             else
             {
                 var bytes = AudioFrameCodec.Serialize(frame);
-                await _send(bytes, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _send(bytes, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // 到点停止：发送被取消属于正常结束，不向上抛。
+                    break;
+                }
+
                 FramesSent++;
                 if (FramesSent == 1)
                 {

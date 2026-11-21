@@ -28,6 +28,8 @@ class TicketRejection(StrEnum):
     EXPIRED = "expired"
     REPLAYED = "replayed"
     WRONG_SESSION = "wrong_session"
+    WRONG_PURPOSE = "wrong_purpose"
+    WRONG_GENERATION = "wrong_generation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,23 +68,38 @@ class TicketIssuer:
         self._used.clear()
         self._required = False
 
-    def issue(self) -> str:
-        """签发一张票据。"""
+    def issue(self, purpose: str = "audio", generation: int | None = None) -> str:
+        """签发一张票据。
+
+        ``purpose`` 区分用途（audio / asr）；``generation`` 可选绑定采集会话代次，
+        用于 ASR 票据在采集重启后自动失效。
+        """
         if not self._session:
             raise RuntimeError("no active capture session")
         nonce = secrets.token_hex(12)
-        payload = {
-            "p": "audio",
+        payload: dict[str, object] = {
+            "p": purpose,
             "n": nonce,
             "s": self._session,
             "e": int(self._now()) + self._ttl,
         }
+        if generation is not None:
+            payload["g"] = generation
         body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
         signature = hmac.new(self._secret, body, hashlib.sha256).digest()
         return f"{_b64(body)}.{_b64(signature)}"
 
-    def consume(self, value: str | None) -> TicketCheck:
-        """校验并消费一张票据（成功即失效）。"""
+    def consume(
+        self,
+        value: str | None,
+        purpose: str = "audio",
+        generation: int | None = None,
+    ) -> TicketCheck:
+        """校验并消费一张票据（成功即失效）。
+
+        ``purpose`` 与签发时不一致会被拒绝；传入 ``generation`` 时还要求票据绑定
+        同一代次（未绑定代次的票据不满足带代次校验的请求）。
+        """
         if not value or len(value) > MAX_TICKET_LENGTH:
             return TicketCheck(False, TicketRejection.MALFORMED)
         try:
@@ -101,12 +118,20 @@ class TicketIssuer:
             nonce = str(payload["n"])
             session = str(payload["s"])
             expiry = int(payload["e"])
-            purpose = str(payload["p"])
+            ticket_purpose = str(payload["p"])
+            ticket_generation = payload.get("g")
         except (ValueError, KeyError, TypeError):
             return TicketCheck(False, TicketRejection.MALFORMED)
 
-        if purpose != "audio":
-            return TicketCheck(False, TicketRejection.BAD_SIGNATURE)
+        if ticket_purpose != purpose:
+            return TicketCheck(False, TicketRejection.WRONG_PURPOSE)
+        if purpose == "asr" and generation is None:
+            # ASR 票据必须绑定采集代次，避免跨会话复用。
+            return TicketCheck(False, TicketRejection.WRONG_GENERATION)
+        if generation is not None and (
+            ticket_generation is None or int(ticket_generation) != generation
+        ):
+            return TicketCheck(False, TicketRejection.WRONG_GENERATION)
         if session != self._session:
             return TicketCheck(False, TicketRejection.WRONG_SESSION)
         if nonce in self._used:

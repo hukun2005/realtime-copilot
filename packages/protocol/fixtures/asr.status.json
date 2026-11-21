@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "type": "asr.status",
+  "eventId": "evt_01JAY0000000000000000000G",
+  "ts": 1763700000100,
+  "payload": {
+    "state": "connecting",
+    "since": 1763700000000,
+    "provider": "deepseek",
+    "errorCode": null,
+    "error": null
+  }
+}
