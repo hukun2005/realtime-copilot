@@ -47,6 +47,7 @@ class AsrManager:
         self._partials = 0
         self._finals = 0
         self._errors = 0
+        self._error_codes: dict[str, int] = {}
         self._current_generation = current_generation
 
     @property
@@ -73,6 +74,7 @@ class AsrManager:
             "partials": self._partials,
             "finals": self._finals,
             "errors": self._errors,
+            "errorCodes": dict(self._error_codes),
         }
 
     async def start(self) -> bool:
@@ -238,6 +240,8 @@ class AsrManager:
         retryable: bool = False,
     ) -> None:
         self._errors += 1
+        self._error_codes[code] = self._error_codes.get(code, 0) + 1
+        self._error_codes[code] = self._error_codes.get(code, 0) + 1
         await self._broadcast(
             make_asr_error(code=code, message=message, segment_id=segment_id, retryable=retryable)
         )

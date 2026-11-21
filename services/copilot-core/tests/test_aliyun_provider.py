@@ -104,8 +104,8 @@ async def test_transcribe_yields_partial_then_final() -> None:
 
     results = [item async for item in provider.transcribe(segment())]
 
-    assert [item.final for item in results] == [False, True]
-    assert [item.revision for item in results] == [1, 2]
+    assert [item.final for item in results] == [False, False, True]
+    assert [item.revision for item in results] == [1, 2, 3]
     assert results[-1].text == "大家好。"
 
 
@@ -115,7 +115,25 @@ async def test_empty_text_is_ignored() -> None:
 
     results = [item async for item in provider.transcribe(segment())]
 
-    assert [item.text for item in results] == ["好"]
+    assert [item.text for item in results] == ["好", "好"]
+
+
+async def test_multiple_sentences_merge_into_one_final() -> None:
+    socket = FakeSocket(
+        [
+            started(),
+            sentence("第一句。", end=True),
+            sentence("第二句。", end=True),
+            finished(),
+        ]
+    )
+    provider, _ = make_provider(socket)
+
+    results = [item async for item in provider.transcribe(segment())]
+
+    finals = [item for item in results if item.final]
+    assert len(finals) == 1
+    assert finals[0].text == "第一句。第二句。"
 
 
 async def test_task_failed_maps_to_provider_error() -> None:

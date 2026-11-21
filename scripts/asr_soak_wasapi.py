@@ -93,6 +93,23 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[
         if status["payload"]["state"] != "capturing":
             raise RuntimeError(f"capture failed: {status['payload']}")
 
+        async def heartbeat() -> None:
+            while True:
+                try:
+                    raw = await ws.recv()
+                except Exception:
+                    return
+                message = json.loads(raw)
+                if message.get("type") == "ping":
+                    await ws.send(
+                        _envelope(
+                            "pong",
+                            {"nonce": (message.get("payload") or {}).get("nonce")},
+                            message.get("requestId"),
+                        )
+                    )
+
+        hb = asyncio.create_task(heartbeat())
         deadline = started + minutes * 60
         while time.monotonic() < deadline:
             snapshot = await asyncio.to_thread(_healthz, port)
@@ -109,13 +126,10 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float) -> dict[
 
         stop_id = "req_" + uuid.uuid4().hex
         await ws.send(_envelope("capture.stop", {}, stop_id))
-        with contextlib.suppress(Exception):
-            await wait_for(
-                ws,
-                lambda m: m.get("type") == "audio.status"
-                and m.get("payload", {}).get("state") in ("idle", "error"),
-                deadline_seconds=30,
-            )
+        await asyncio.sleep(2)
+        hb.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await hb
 
     loopback = [
         (sample["audio"] or {}).get("sources", {}).get("loopback", {}) for sample in samples

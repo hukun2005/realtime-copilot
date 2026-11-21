@@ -107,6 +107,7 @@ class DashScopeParaformerProvider(AsrProvider):
         self._metrics["segment_count"] += 1
         socket = await self._open_socket()
         revision = 0
+        committed = ""
         try:
             await self._run_task(socket)
             await self._send_audio(socket, segment.pcm16)
@@ -119,6 +120,18 @@ class DashScopeParaformerProvider(AsrProvider):
                     self._metrics["provider_error_count"] += 1
                     raise AsrError("asr_provider_error", _error_text(message))
                 if event == "task-finished":
+                    # 一个 SpeechSegment 只能有一个 final；多句在此合并。
+                    if committed:
+                        revision += 1
+                        yield AsrResult(
+                            segment_id=segment.segment_id,
+                            source=segment.source,
+                            revision=revision,
+                            text=committed,
+                            start_ts_ns=segment.start_ts_ns,
+                            end_ts_ns=segment.end_ts_ns,
+                            final=True,
+                        )
                     return
 
                 sentence = _sentence(message)
@@ -127,8 +140,10 @@ class DashScopeParaformerProvider(AsrProvider):
                 text = str(sentence.get("text") or "").strip()
                 if not text:
                     continue
+                if sentence.get("sentence_end"):
+                    committed = f"{committed}{text}" if committed else text
+                    text = committed
                 revision += 1
-                final = bool(sentence.get("sentence_end"))
                 yield AsrResult(
                     segment_id=segment.segment_id,
                     source=segment.source,
@@ -136,7 +151,7 @@ class DashScopeParaformerProvider(AsrProvider):
                     text=text,
                     start_ts_ns=segment.start_ts_ns,
                     end_ts_ns=segment.end_ts_ns,
-                    final=final,
+                    final=False,
                 )
         except asyncio.CancelledError:
             raise
