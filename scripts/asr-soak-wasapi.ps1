@@ -9,7 +9,7 @@
   需要系统存在可用的默认播放设备；无音频帧时报告 FAIL，不伪造。
 #>
 param(
-    [int]$Minutes = 30,
+    [double]$Minutes = 30,
     [int]$Interval = 30
 )
 

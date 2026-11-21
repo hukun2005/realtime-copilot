@@ -930,18 +930,21 @@ capture.stop()
 - `AsrManager` 快照新增 `partials` / `finals` / `errors` 计数。
 - App 按 provider 选择 Key 环境变量（aliyun → `DASHSCOPE_API_KEY`）。
 
-### 30 分钟尝试结果：未通过（环境/链路缺陷）
+### 30 分钟尝试结果与根因修正
 
-连续 3 次尝试均在同一处失败：
+首次冒烟失败（sidecar 启动后立即 `capture.stop`）的**根因是测试脚本**：
 
-- Core 控制面成功拉起 sidecar，sidecar 以 `role=audio` 连接并收到 `capture.start`；
-- 侧车日志显示 `capture started`、`first capture buffer bytes=3840 48000Hz 2ch`；
-- 随即 `capture stopped: source=loopback sent=0 dropped=0`，音频连接关闭；
-- Core 报 `sidecar_exited (exit code 1)`，`capture.start` 返回 `error`。
+- `scripts/asr-soak-wasapi.ps1` 的 `Minutes` 参数声明为 `[int]`；
+- 传 `-Minutes 0.2/0.3` 被取整为 `0`，驱动等待 0 分钟并立即发送 `capture.stop`；
+- sidecar 行为正常，并非产品生命周期缺陷。此前“sidecar 控制模式缺陷”的结论已更正。
 
-结论：**30 分钟真实 WASAPI + Paraformer 未完成，报告为 NOT_RUN / FAIL，不是 PASS。**
-该失败发生在采集控制面消费循环（首帧后立即停止），与 Paraformer Provider 无关；
-需先修复 sidecar 控制模式生命周期，再重跑。
+修复：`Minutes` 改为 `[double]`；驱动增加心跳 `pong` 应答；Aliyun Provider 把同一 Segment 的
+多个 `sentence_end` 合并为一个 final，避免 `asr_segment_conflict`。
+
+1 分钟真实 WASAPI + Paraformer 冒烟（干净工作区外，验证链路）：**PASS**
+（2507 帧 / 14 Segment / 119 partial / 14 final / 0 error）。
+
+30 分钟完整报告在本次提交后、干净 SHA 上单独执行；未完成前仍标记 **NOT_RUN**。
 
 ### 其他验证
 
