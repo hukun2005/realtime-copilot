@@ -251,6 +251,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P3.5 评测 | 合成/本地数据集、CER/WER、Provider 对比、延迟、稳定性、真实会议记录 |
 | P4 问题检测 | 转写管理、规则分类、追问关联、状态机、手动入口、人工标注评测 |
 | P4 补充 | LLM Review / Answer 可插拔接口；真实模型未接入 |
+| P5 流式 | DeepSeek SSE stream、AnswerContext、AnswerTaskManager、取消/抢占、真实冒烟 |
 
 **未完成**
 

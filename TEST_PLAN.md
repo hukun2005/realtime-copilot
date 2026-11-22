@@ -465,3 +465,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | P4.6 | 130 条人工标注：P/R/F1、类型、追问、陈述误报 |
 | P4.7 | 空/超长/非法来源/异常隔离/高频 |
 | P4.8 | `/healthz.detection`；ASR final 进入检测 |
+
+
+### P5 流式回答
+
+| 类别 | 断言 |
+|---|---|
+| SSE | 多 chunk、[DONE]、非法 JSON、401/403/429/5xx、断网、超时 |
+| 取消 | 主动取消、新任务抢占、旧 generation 不回调、close 幂等 |
+| Context | 项目证据与通用知识分离；无证据提示不编造 |
+| 真实 | `deepseek-flash` 流式与取消；无 Key => NOT_RUN |
