@@ -1462,7 +1462,40 @@ Aliyun 分类 CER micro：
 - CER 未做数字/单位 ITN，`numbers` 类别偏高；WER 对中文近似字符级。
 - 每类样本量很小（1–3 个），不能外推为总体质量。
 
+## 2026-11-22 · P35-04：ASR Segment 延迟
+
+基线 `2fd3019`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 口径
+
+`scripts/eval_latency.py` 对合成集逐样本测量：
+
+- `firstPartialMs`：调用 `transcribe` → 首个 partial；
+- `finalMs`：调用 → 首个 final（含整段音频上传）；
+- `finalizationMs`：`finalMs - 上传耗时估计`（100ms 音频 / 10ms 间隔 ≈ 10x 实时）。
+
+这是 **Segment 识别延迟**，不是面试回答延迟，也不是真实会议流式字幕延迟。
+
+### 结果
+
+| Provider | 状态 | 有 final | Final P50/P95 | Finalization P50/P95 | 首 partial P50/P95 |
+|---|---|---|---|---|---|
+| aliyun | **PASS** | 10 / 11 | 1,404.9 / 4,126.2 ms | **771.9 / 2,228.2 ms** | 1,038.0 / 2,995.4 ms |
+| deepgram | **NOT_RUN** | - | - | - | - |
+
+- 静音样本无 final，不计入延迟分位；
+- 长样本（18.98s）上传耗时估计 1.9s，是 P95 的主要来源；
+- 样本量 10，P95 接近最大值，不能外推总体分布。
+
+### 限制
+
+- 音频是离线整段提交并按 10x 实时发送，不是会议中的实时节奏；
+- `finalizationMs` 是估算值，依赖固定发送节奏；
+- 仅 Aliyun 有结果，Deepgram 无 Key 为 `NOT_RUN`；
+- 不代表真实会议/面试回答延迟。
+
 ### 变更记录
+
 
 
 

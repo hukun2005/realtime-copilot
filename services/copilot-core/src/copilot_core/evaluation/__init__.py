@@ -1,5 +1,6 @@
 """ASR 评测指标。"""
 
+from .latency import LatencyRecord, percentile, summarize
 from .metrics import (
     AggregateScore,
     EditCounts,
@@ -15,11 +16,14 @@ from .metrics import (
 __all__ = [
     "AggregateScore",
     "EditCounts",
+    "LatencyRecord",
     "SampleScore",
     "aggregate",
     "cer_units",
     "edit_counts",
     "normalize_text",
+    "percentile",
     "score_sample",
+    "summarize",
     "wer_units",
 ]

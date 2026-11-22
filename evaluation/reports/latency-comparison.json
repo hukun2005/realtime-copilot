@@ -1,0 +1,161 @@
+{
+  "generatedAt": "2026-11-22T07:26:29.422705+00:00",
+  "dataset": "realtime-copilot-p35-synthetic",
+  "providers": [
+    {
+      "provider": "aliyun",
+      "status": "PASS",
+      "model": "paraformer-realtime-v2",
+      "summary": {
+        "samples": 11,
+        "withFinal": 10,
+        "withPartial": 10,
+        "errors": 0,
+        "noFinal": [
+          "silence_01"
+        ],
+        "finalP50Ms": 1404.9,
+        "finalP95Ms": 4126.2,
+        "finalMinMs": 1109.4,
+        "finalMaxMs": 4126.2,
+        "finalizationP50Ms": 771.9,
+        "finalizationP95Ms": 2228.2,
+        "finalizationMinMs": 581.9,
+        "finalizationMaxMs": 2228.2,
+        "firstPartialP50Ms": 1038.0,
+        "firstPartialP95Ms": 2995.4,
+        "firstPartialMinMs": 844.4,
+        "firstPartialMaxMs": 2995.4
+      },
+      "errors": [],
+      "samples": [
+        {
+          "id": "clean_01",
+          "category": "clean",
+          "audioSeconds": 6.33,
+          "firstPartialMs": 1160.3,
+          "finalMs": 1561.7,
+          "finalizationMs": 928.7,
+          "uploadEstimateMs": 633.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "clean_02",
+          "category": "clean",
+          "audioSeconds": 5.11,
+          "firstPartialMs": 844.4,
+          "finalMs": 1121.3,
+          "finalizationMs": 610.3,
+          "uploadEstimateMs": 511.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "technical_01",
+          "category": "technical",
+          "audioSeconds": 7.145,
+          "firstPartialMs": 1154.8,
+          "finalMs": 2048.8,
+          "finalizationMs": 1334.3,
+          "uploadEstimateMs": 714.5,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "numbers_01",
+          "category": "numbers",
+          "audioSeconds": 6.65,
+          "firstPartialMs": 1083.5,
+          "finalMs": 1354.8,
+          "finalizationMs": 689.8,
+          "uploadEstimateMs": 665.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "mixed_01",
+          "category": "mixed",
+          "audioSeconds": 5.275,
+          "firstPartialMs": 866.3,
+          "finalMs": 1109.4,
+          "finalizationMs": 581.9,
+          "uploadEstimateMs": 527.5,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "filler_01",
+          "category": "filler",
+          "audioSeconds": 5.47,
+          "firstPartialMs": 888.6,
+          "finalMs": 1147.3,
+          "finalizationMs": 600.3,
+          "uploadEstimateMs": 547.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "long_01",
+          "category": "long",
+          "audioSeconds": 18.98,
+          "firstPartialMs": 2995.4,
+          "finalMs": 4126.2,
+          "finalizationMs": 2228.2,
+          "uploadEstimateMs": 1898.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "clean_01_snr15",
+          "category": "noisy",
+          "audioSeconds": 6.33,
+          "firstPartialMs": 1030.7,
+          "finalMs": 1406.0,
+          "finalizationMs": 773.0,
+          "uploadEstimateMs": 633.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "clean_01_snr5",
+          "category": "noisy",
+          "audioSeconds": 6.33,
+          "firstPartialMs": 1038.0,
+          "finalMs": 1404.9,
+          "finalizationMs": 771.9,
+          "uploadEstimateMs": 633.0,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "technical_01_snr10",
+          "category": "noisy",
+          "audioSeconds": 7.145,
+          "firstPartialMs": 1160.1,
+          "finalMs": 1646.9,
+          "finalizationMs": 932.4,
+          "uploadEstimateMs": 714.5,
+          "finals": 1,
+          "error": null
+        },
+        {
+          "id": "silence_01",
+          "category": "silence",
+          "audioSeconds": 3.0,
+          "firstPartialMs": null,
+          "finalMs": null,
+          "finalizationMs": null,
+          "uploadEstimateMs": 300.0,
+          "finals": 0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "provider": "deepgram",
+      "status": "NOT_RUN",
+      "reason": "DEEPGRAM_API_KEY not set"
+    }
+  ]
+}

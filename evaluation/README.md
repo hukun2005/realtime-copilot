@@ -103,3 +103,16 @@ Deepgram 无 Key 为 `NOT_RUN`；这是合成集结果，不是真实会议质�
 
 数字类别受“中文数字 vs 阿拉伯数字”影响（如“一千二百三十四” vs `1234`），
 当前 CER 未做数字 ITN，报告需同时看文本假设。
+
+
+## 延迟（P35-04）
+
+```powershell
+uv run python scripts/eval_latency.py --providers aliyun deepgram
+```
+
+输出 `reports/latency-comparison.{json,md}`。
+
+- `firstPartialMs` / `finalMs` 从整段音频提交开始；
+- `finalizationMs` 减去上传耗时估计（约 10x 实时发送）；
+- 不是面试回答延迟；真实会议流式延迟仍需单独测量。
