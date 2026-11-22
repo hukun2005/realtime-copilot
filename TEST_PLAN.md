@@ -405,3 +405,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 会话 | capture.start 建会话，capture.stop 后 status=completed |
 | 持久化 | Core 停止后重新打开 DB 仍可查询会话与 Segment |
 | 失败策略 | 转写/广播失败不阻断 ASR；短测帧率阈值 0.85，长测 1.0 |
+
+
+### P35-01 数据集
+
+| 类别 | 断言 |
+|---|---|
+| manifest | 结构、唯一 id、文件存在、SHA-256 |
+| 音频 | 16k/16-bit/mono，时长与 manifest 一致 |
+| 覆盖 | clean/technical/numbers/mixed/filler/long/noisy/silence |
+| 隐私 | 仓库仅合成音频，真实会议在 evaluation/local/ 且不提交 |

@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "name": "realtime-copilot-p35-synthetic",
+  "created": "2026-11-22",
+  "description": "P3.5 ASR 评测的合成 TTS 基线 + 确定性噪声/静音控制样本。",
+  "privacy": "仅合成语音；不含真实会议或个人信息。真实会议录音只在本地评测，不进入仓库。",
+  "license": "由 Windows System.Speech 本地合成，仅用于本项目测试。",
+  "generator": {
+    "clean": "scripts/build-eval-dataset.ps1 (Microsoft Huihui, 16k mono PCM16)",
+    "noiseAndManifest": "scripts/build_eval_manifest.py"
+  },
+  "samples": [
+    {
+      "id": "clean_01",
+      "file": "audio/clean_01.wav",
+      "category": "clean",
+      "language": "zh-CN",
+      "durationSeconds": 6.33,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "ec64c936a003412b3f36b7d1f5a48f5e793cb79e079201483e41f334343ab6dc",
+      "reference": "大家好，今天我们讨论实时转写和会议助手的架构设计。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "clean_02",
+      "file": "audio/clean_02.wav",
+      "category": "clean",
+      "language": "zh-CN",
+      "durationSeconds": 5.11,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "eb0db72aaa2ea31d0637a0b0ffb9084bbec65cecc8c7d7848facf47619d559e7",
+      "reference": "请把接口文档发到群里，下午三点前确认。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "technical_01",
+      "file": "audio/technical_01.wav",
+      "category": "technical",
+      "language": "zh-CN",
+      "durationSeconds": 7.145,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "40ce8a052f1f14d1b1f5a9f1494c15180f29a9a4d59d527a10fb0e3d02ce2a0c",
+      "reference": "我们用 Vue3 和 TypeScript 实现桌面端，后端是 Python 和 SQLite。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "numbers_01",
+      "file": "audio/numbers_01.wav",
+      "category": "numbers",
+      "language": "zh-CN",
+      "durationSeconds": 6.65,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "81bb08d38f9716fe78ace4c35c58543c9e0d394689d4a3f77a762062753ea968",
+      "reference": "第一季度营收是一千二百三十四万元，同比增长百分之十五。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "mixed_01",
+      "file": "audio/mixed_01.wav",
+      "category": "mixed",
+      "language": "zh-CN",
+      "durationSeconds": 5.275,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "ffba5d093c68f414805da9eb60e56a71bf4521cea77289dc80020d0b8e622c9e",
+      "reference": "这个 API 的 P95 延迟要控制在八百毫秒以内。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "filler_01",
+      "file": "audio/filler_01.wav",
+      "category": "filler",
+      "language": "zh-CN",
+      "durationSeconds": 5.47,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "1f1afcf4697fb2c100f9c073dac340f5ca02af22c2c816289110e5ef4a95bc18",
+      "reference": "嗯，那个，我们再确认一下这个方案，好吧？",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "long_01",
+      "file": "audio/long_01.wav",
+      "category": "long",
+      "language": "zh-CN",
+      "durationSeconds": 18.98,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "b7f71a021b2b4885ea14337d5d780f8f32d0800f94e47b804c05a95bfac540d4",
+      "reference": "今天的会议主要讨论三个议题。第一是实时转写的准确率，第二是端到端延迟，第三是会议结束后的记录整理。请各位分别说明自己负责的部分，并在周五之前给出结论。",
+      "conditions": {
+        "noise": "none"
+      }
+    },
+    {
+      "id": "clean_01_snr15",
+      "file": "audio/clean_01_snr15.wav",
+      "category": "noisy",
+      "language": "zh-CN",
+      "durationSeconds": 6.33,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "8c23af258770b6a676b6e52d96cf813e2f7cc7194e4aad82f06b8f4014bf03e8",
+      "reference": "大家好，今天我们讨论实时转写和会议助手的架构设计。",
+      "conditions": {
+        "noise": "white",
+        "snrDb": 15
+      },
+      "notes": "deterministic additive white Gaussian noise"
+    },
+    {
+      "id": "clean_01_snr5",
+      "file": "audio/clean_01_snr5.wav",
+      "category": "noisy",
+      "language": "zh-CN",
+      "durationSeconds": 6.33,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "488a728d394c544d63fecd4b8b5f3d3af9bf9fa63804a6a871d477a863f1bb13",
+      "reference": "大家好，今天我们讨论实时转写和会议助手的架构设计。",
+      "conditions": {
+        "noise": "white",
+        "snrDb": 5
+      },
+      "notes": "deterministic additive white Gaussian noise"
+    },
+    {
+      "id": "technical_01_snr10",
+      "file": "audio/technical_01_snr10.wav",
+      "category": "noisy",
+      "language": "zh-CN",
+      "durationSeconds": 7.145,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "72d65f3e9b185b3d77c01d073f9a291effb9f5a9b586b5cb20a340dfe3374c41",
+      "reference": "我们用 Vue3 和 TypeScript 实现桌面端，后端是 Python 和 SQLite。",
+      "conditions": {
+        "noise": "white",
+        "snrDb": 10
+      },
+      "notes": "deterministic additive white Gaussian noise"
+    },
+    {
+      "id": "silence_01",
+      "file": "audio/silence_01.wav",
+      "category": "silence",
+      "language": "zh-CN",
+      "durationSeconds": 3.0,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "sha256": "d303811b8c84619667cd0501342f84ec6cbe69f7aa3856dcf52fabda374c92b8",
+      "reference": "",
+      "conditions": {
+        "noise": "none",
+        "speech": false
+      },
+      "notes": "no-speech control; reference is empty"
+    }
+  ],
+  "localOnly": {
+    "instruction": "把授权的真实会议录音放在 evaluation/local/，用同名 manifest 记录 reference；不得提交音频。",
+    "manifestSchema": {
+      "id": "string",
+      "file": "local/xxx.wav",
+      "category": "meeting",
+      "reference": "人工校对文本",
+      "consent": "记录授权来源"
+    }
+  }
+}

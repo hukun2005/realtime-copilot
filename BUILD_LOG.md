@@ -1346,7 +1346,42 @@ Core 停止后重新打开同一 SQLite：会话仍为 `completed`，34 条 Segm
 
 Python **402 passed / 3 skipped**；ruff；C# 91；协议 28；桌面 11；typecheck 通过。
 
+## 2026-11-22 · P35-01：ASR 评测数据集
+
+基线 `bb42271`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 数据集
+
+`evaluation/dataset/`（11 个样本，约 2.5 MB，16k/16-bit/mono）：
+
+- clean ×2、technical ×1、numbers ×1、mixed ×1、filler ×1、long ×1
+- noisy ×3：clean_01 SNR 15/5 dB、technical_01 SNR 10 dB（确定性白噪声）
+- silence ×1：3s 无语音控制
+
+每个样本在 `manifest.json` 中有参考文本、类别、时长、采样率、SHA-256 与条件。
+语音由 Windows `System.Speech`（Microsoft Huihui）本地合成，**不是真人会议**。
+
+### 隐私
+
+- 仓库只含合成音频；真实会议录音放 `evaluation/local/`（已 gitignore），不提交。
+- 本地真实录音需登记授权来源与人工校对 reference；报告只写哈希/时长/指标。
+- 不存 API Key、不存会议正文到日志。
+
+### 工具
+
+- `scripts/build-eval-dataset.ps1`：合成 TTS 基线
+- `scripts/build_eval_manifest.py`：生成噪声/静音与 manifest（含哈希）
+- `evaluation/README.md`：组成、隐私、真实录音接入与评测口径
+
+### 测试
+
+新增 6 个：manifest 结构、文件存在/哈希、音频格式/时长、参考文本、类别覆盖、
+仅合成音频边界。
+
+全量 Python **408 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
