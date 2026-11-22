@@ -84,3 +84,22 @@ uv run python scripts/evaluate_asr.py `
 - `evaluation/reports/cer-wer-<label>.md`
 
 报告默认不写参考/假设正文；真实会议评估只保留样本 id、类别与指标。
+
+
+## Provider 对比（P35-03）
+
+```powershell
+uv run python scripts/eval_providers.py --providers aliyun deepgram
+```
+
+输出：
+
+- `reports/hypotheses-<provider>.json`
+- `reports/cer-wer-<provider>.{json,md}`
+- `reports/provider-comparison.{json,md}`
+
+缺 Key 的 Provider 标记 `NOT_RUN`，不会生成指标。当前 Aliyun（合成 TTS）CER 12.54%，
+Deepgram 无 Key 为 `NOT_RUN`；这是合成集结果，不是真实会议质量。
+
+数字类别受“中文数字 vs 阿拉伯数字”影响（如“一千二百三十四” vs `1234`），
+当前 CER 未做数字 ITN，报告需同时看文本假设。

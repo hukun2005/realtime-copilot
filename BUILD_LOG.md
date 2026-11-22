@@ -1413,7 +1413,57 @@ micro/macro、静音排除、分类汇总。
 
 全量 Python **419 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P35-03：Provider 对比（合成 TTS）
+
+基线 `5429251`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 工具
+
+`scripts/eval_providers.py`：
+
+- 对 `evaluation/dataset` 的 11 个样本逐个调用真实 Provider；
+- 假设写入 `evaluation/reports/hypotheses-<provider>.json`；
+- 调用 `evaluate_asr.py` 生成 `cer-wer-<provider>.{json,md}`；
+- 汇总 `provider-comparison.{json,md}`；
+- 缺 Key → `NOT_RUN`，连接/样本失败 → `ERROR`/`PARTIAL`，不伪造成 PASS。
+
+### 结果
+
+| Provider | 状态 | 模型 | CER micro | WER micro | 计分样本 |
+|---|---|---|---|---|---|
+| aliyun | **PASS** | paraformer-realtime-v2 | **12.54%** | 10.53% | 10 |
+| deepgram | **NOT_RUN** | - | - | - | - |
+
+Aliyun 分类 CER micro：
+
+| 类别 | CER micro |
+|---|---|
+| clean | 0.00% |
+| filler | 0.00% |
+| long | 0.00% |
+| noisy（3） | 17.65% |
+| mixed | 14.29% |
+| technical | 17.95% |
+| numbers | 48.00% |
+| silence | 0 幻觉 |
+
+### 误差分析
+
+- `numbers_01`：参考“一千二百三十四”“百分之十五”，假设输出 `1234`、`15`；
+  语义正确，但当前 CER 未做数字 ITN，导致 48% 的字符差异。
+- `technical_01`：`Vue3` → “无三”，`SQLite` → “sq light”；噪声下进一步退化。
+- `mixed_01`：`八百` → `800`，同样受数字格式影响。
+- 干净句、长句、填充词、15dB 噪声与静音控制均为 0 错误/0 幻觉。
+
+### 限制
+
+- 仅 TTS 合成音频，**不是真实会议**；真实会议 WER 仍 `NOT_MEASURED`。
+- Deepgram 无 Key，状态 `NOT_RUN`，不能与 Aliyun 比较质量。
+- CER 未做数字/单位 ITN，`numbers` 类别偏高；WER 对中文近似字符级。
+- 每类样本量很小（1–3 个），不能外推为总体质量。
+
 ### 变更记录
+
 
 
 

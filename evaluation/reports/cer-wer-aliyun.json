@@ -1,0 +1,160 @@
+{
+  "dataset": "realtime-copilot-p35-synthetic",
+  "datasetVersion": 1,
+  "label": "aliyun",
+  "hypothesisSource": "aliyun",
+  "generatedAt": "2026-11-22T07:22:50.137961+00:00",
+  "missing": [],
+  "aggregate": {
+    "sampleCount": 11,
+    "scoredSamples": 10,
+    "emptyReferenceSamples": 1,
+    "hallucinations": 0,
+    "cerMicro": 0.1254,
+    "werMicro": 0.1053,
+    "cerMacro": 0.1205,
+    "werMacro": 0.1288,
+    "totalCerErrors": 37,
+    "totalCerReference": 295,
+    "totalWerErrors": 26,
+    "totalWerReference": 247,
+    "perCategory": {
+      "clean": {
+        "samples": 2,
+        "cerMicro": 0.0,
+        "cerMacro": 0.0
+      },
+      "filler": {
+        "samples": 1,
+        "cerMicro": 0.0,
+        "cerMacro": 0.0
+      },
+      "long": {
+        "samples": 1,
+        "cerMicro": 0.0,
+        "cerMacro": 0.0
+      },
+      "mixed": {
+        "samples": 1,
+        "cerMicro": 0.1429,
+        "cerMacro": 0.1429
+      },
+      "noisy": {
+        "samples": 3,
+        "cerMicro": 0.1765,
+        "cerMacro": 0.1342
+      },
+      "numbers": {
+        "samples": 1,
+        "cerMicro": 0.48,
+        "cerMacro": 0.48
+      },
+      "technical": {
+        "samples": 1,
+        "cerMicro": 0.1795,
+        "cerMacro": 0.1795
+      }
+    }
+  },
+  "samples": [
+    {
+      "id": "clean_01",
+      "category": "clean",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 23,
+      "hallucination": false
+    },
+    {
+      "id": "clean_02",
+      "category": "clean",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 17,
+      "hallucination": false
+    },
+    {
+      "id": "technical_01",
+      "category": "technical",
+      "cer": 0.1795,
+      "wer": 0.2353,
+      "cerErrors": 7,
+      "cerReference": 39,
+      "hallucination": false
+    },
+    {
+      "id": "numbers_01",
+      "category": "numbers",
+      "cer": 0.48,
+      "wer": 0.48,
+      "cerErrors": 12,
+      "cerReference": 25,
+      "hallucination": false
+    },
+    {
+      "id": "mixed_01",
+      "category": "mixed",
+      "cer": 0.1429,
+      "wer": 0.1176,
+      "cerErrors": 3,
+      "cerReference": 21,
+      "hallucination": false
+    },
+    {
+      "id": "filler_01",
+      "category": "filler",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 16,
+      "hallucination": false
+    },
+    {
+      "id": "long_01",
+      "category": "long",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 69,
+      "hallucination": false
+    },
+    {
+      "id": "clean_01_snr15",
+      "category": "noisy",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 23,
+      "hallucination": false
+    },
+    {
+      "id": "clean_01_snr5",
+      "category": "noisy",
+      "cer": 0.0435,
+      "wer": 0.0435,
+      "cerErrors": 1,
+      "cerReference": 23,
+      "hallucination": false
+    },
+    {
+      "id": "technical_01_snr10",
+      "category": "noisy",
+      "cer": 0.359,
+      "wer": 0.4118,
+      "cerErrors": 14,
+      "cerReference": 39,
+      "hallucination": false
+    },
+    {
+      "id": "silence_01",
+      "category": "silence",
+      "cer": 0.0,
+      "wer": 0.0,
+      "cerErrors": 0,
+      "cerReference": 0,
+      "hallucination": false
+    }
+  ]
+}

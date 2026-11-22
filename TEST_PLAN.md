@@ -425,3 +425,12 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 对齐 | 替换/插入/删除计数、空假设、空参考 |
 | 汇总 | micro/macro、分类、静音幻觉单独统计 |
 | 报告 | JSON/Markdown 不含正文；oracle 仅自检 |
+
+
+### P35-03 Provider 对比
+
+| 类别 | 断言 |
+|---|---|
+| 状态 | 缺 Key => NOT_RUN；失败 => ERROR/PARTIAL，不伪装 PASS |
+| Aliyun | 11/11 假设，10 计分 + 1 静音；CER/WER 由工具计算 |
+| 报告 | 假设 JSON + CER/WER + 汇总，注明 TTS 非会议 |
