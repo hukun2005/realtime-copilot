@@ -386,3 +386,12 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | capture stop | flush + 结束会话；ASR stop 失败也执行 |
 | shutdown | 活动会话被结束；Handler 幂等 |
 | 隔离 | 转写异常不影响 ASR 广播/采集 |
+
+
+### P34-06 指标
+
+| 类别 | 断言 |
+|---|---|
+| snapshot | assembled/persisted/持久化错误/广播错误、装配与缓冲计数 |
+| 隐私 | snapshot 不含转写正文 |
+| healthz | `/healthz.transcript` 反映 active/generation/persisted |

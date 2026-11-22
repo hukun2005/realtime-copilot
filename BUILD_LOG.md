@@ -1282,7 +1282,34 @@ Python **382 passed / 3 skipped**；ruff 通过。
 shutdown 结束活动会话、无会话时 asr.final 忽略。
 全量 Python **399 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-06：转写指标与诊断
+
+基线 `25fbdd1`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 指标
+
+`TranscriptHandler.snapshot()`（不含正文）：
+
+- 会话：`active`、`sessionId`、`generation`
+- 处理：`assembled`、`persisted`、`persistErrors`、`broadcastErrors`
+- 装配：`accepted/emitted/duplicates/outOfOrder/merged/gaps/stale/empty/overflowEmitted`
+- 缓冲：`appended/duplicates/stale/outOfOrder/gaps/evictedSegments/evictedChars/segmentCount/charCount`
+
+`GET /healthz` 新增 `transcript` 字段；未启动会话时仍返回结构，`active=false`。
+
+### 失败计数
+
+`TranscriptStore.append` 抛 `StorageError` 时 `persistErrors+1`，不广播、不抛；
+广播失败 `broadcastErrors+1`，已落库数据保留。
+
+### 测试
+
+新增 3 个：snapshot 计数且不含正文、持久化失败计数、`/healthz.transcript`。
+
+全量 Python **402 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

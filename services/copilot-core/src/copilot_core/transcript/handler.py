@@ -49,6 +49,7 @@ class TranscriptHandler:
         self.generation = assembler.generation
         self.assembled = 0
         self.persisted = 0
+        self.persist_errors = 0
         self.broadcast_errors = 0
 
     @property
@@ -117,12 +118,49 @@ class TranscriptHandler:
         self._buffer.clear()
         self.session_id = None
 
+    def snapshot(self) -> dict[str, Any]:
+        """返回转写指标快照，供 ``/healthz`` 使用；不含正文。"""
+        assembler = self._assembler.stats
+        buffer = self._buffer.stats
+        return {
+            "active": self.active,
+            "sessionId": self.session_id,
+            "generation": self.generation,
+            "assembled": self.assembled,
+            "persisted": self.persisted,
+            "persistErrors": self.persist_errors,
+            "broadcastErrors": self.broadcast_errors,
+            "assembler": {
+                "accepted": assembler.accepted,
+                "emitted": assembler.emitted,
+                "duplicates": assembler.duplicates,
+                "outOfOrder": assembler.out_of_order,
+                "merged": assembler.merged,
+                "gaps": assembler.gaps,
+                "stale": assembler.stale,
+                "empty": assembler.empty,
+                "overflowEmitted": assembler.overflow_emitted,
+            },
+            "buffer": {
+                "appended": buffer.appended,
+                "duplicates": buffer.duplicates,
+                "stale": buffer.stale,
+                "outOfOrder": buffer.out_of_order,
+                "gaps": buffer.gaps,
+                "evictedSegments": buffer.evicted_segments,
+                "evictedChars": buffer.evicted_chars,
+                "segmentCount": buffer.segment_count,
+                "charCount": buffer.char_count,
+            },
+        }
+
     async def _emit(self, segment: TranscriptSegment) -> None:
         self.assembled += 1
         self._buffer.append(segment)
         try:
             inserted = self._store.append(self.session_id or "", segment)
         except StorageError:
+            self.persist_errors += 1
             self._logger.warning("transcript: persist failed")
             return
         if not inserted:

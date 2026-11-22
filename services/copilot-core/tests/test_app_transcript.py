@@ -91,6 +91,26 @@ async def test_shutdown_ends_active_session(config, token, data_dir, monkeypatch
         close(connection)
 
 
+async def test_healthz_includes_transcript_metrics(config, token, data_dir, monkeypatch) -> None:
+    monkeypatch.delenv("RTC_ASR_PROVIDER", raising=False)
+    app: FastAPI = create_app(config, token=token, data_dir=data_dir, version="test")
+
+    async with app.router.lifespan_context(app):
+        await app.state.transcript_start(4)
+        await app.state.asr_events(asr_final("seg_a", "指标"))
+        handler = app.state.transcript_handler
+        await handler.flush()
+
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            body = (await client.get("/healthz")).json()
+        assert body["transcript"]["active"] is True
+        assert body["transcript"]["generation"] == 4
+        assert body["transcript"]["persisted"] == 1
+        assert body["transcript"]["assembler"]["accepted"] == 1
+
+
 async def test_asr_events_are_ignored_when_transcript_idle(config, token, data_dir, monkeypatch) -> None:
     monkeypatch.delenv("RTC_ASR_PROVIDER", raising=False)
     app: FastAPI = create_app(config, token=token, data_dir=data_dir, version="test")

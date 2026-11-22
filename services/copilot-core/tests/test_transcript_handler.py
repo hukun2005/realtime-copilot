@@ -6,7 +6,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from copilot_core.storage import close, open_database
+import pytest
+from copilot_core.storage import StorageError, close, open_database
 from copilot_core.transcript import (
     TranscriptAssembler,
     TranscriptBuffer,
@@ -184,6 +185,45 @@ async def test_inactive_handler_ignores_final(tmp_path: Path) -> None:
     try:
         await handler.handle(asr_final("seg_a", "没有会话"))
         assert handler.assembled == 0
+    finally:
+        close(connection)
+
+
+async def test_snapshot_reports_counts_without_text(tmp_path: Path) -> None:
+    connection, handler = make_handler(tmp_path)
+    try:
+        await handler.start(SESSION, generation=3)
+        await handler.handle(asr_final("seg_a", "你好"))
+        await handler.handle(asr_final("seg_a", "你好"))
+        await handler.flush()
+
+        snapshot = handler.snapshot()
+        assert snapshot["active"] is True
+        assert snapshot["sessionId"] == SESSION
+        assert snapshot["generation"] == 3
+        assert snapshot["assembled"] == 1
+        assert snapshot["persisted"] == 1
+        assert snapshot["assembler"]["duplicates"] == 1
+        assert snapshot["buffer"]["segmentCount"] == 1
+        assert "你好" not in repr(snapshot)
+    finally:
+        close(connection)
+
+
+async def test_persist_failure_is_counted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    connection, handler = make_handler(tmp_path)
+    try:
+        await handler.start(SESSION, generation=1)
+
+        def fail(_session_id: str, _segment: Any) -> bool:
+            raise StorageError("disk full")
+
+        monkeypatch.setattr(handler._store, "append", fail)
+        await handler.handle(asr_final("seg_a", "文本"))
+        await handler.flush()
+
+        assert handler.persist_errors == 1
+        assert handler.persisted == 0
     finally:
         close(connection)
 

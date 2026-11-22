@@ -243,6 +243,11 @@ def create_app(
                 if getattr(app.state, "asr_coordinator", None) is not None
                 else None
             ),
+            "transcript": (
+                app.state.transcript_handler.snapshot()
+                if getattr(app.state, "transcript_handler", None) is not None
+                else None
+            ),
             "process": process_memory(),
             "database": "ok" if database_ok else "error",
             }
