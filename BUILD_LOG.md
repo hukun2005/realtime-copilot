@@ -1624,7 +1624,35 @@ answer 失败 FAILED、未 CONFIRMED 拒绝。
 
 全量 Python **452 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P4 补充：DeepSeek 真实 Review / Answer 冒烟
+
+基线 `d43c574`；分支 `feature/p4-deepseek-llm`。
+
+### 实现
+
+- `detection/llm.py`：`DeepSeekClient`（OpenAI 兼容 `/chat/completions`，默认
+  `deepseek-flash`）、`DeepSeekReviewer`、`DeepSeekAnswerProvider`、`parse_review`。
+- Key 只从 `DEEPSEEK_API_KEY` 读取，不进入仓库/日志/报告。
+- 默认规则检测不变；只有显式构造 LLM 类才发请求。
+- `scripts/llm_review_check.py`：规则检测 → LLM Review → 确认 → LLM Answer 冒烟。
+
+### 真实 API
+
+```text
+规则: technical 0.92
+Review: technical 0.99（真实 DeepSeek）
+Answer: 652 ms（deepseek:deepseek-flash）
+```
+
+单条冒烟通过，不代表分类/回答质量；未接 UI、未接协议、未保存答案。
+
+### 测试
+
+新增 4 个 MockTransport 测试：鉴权/端点、Review 解析、Answer、缺 Key。
+Python **456 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
