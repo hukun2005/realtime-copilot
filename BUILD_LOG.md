@@ -1253,7 +1253,37 @@ Python **382 passed / 3 skipped**；ruff 通过。
   广播失败仍落库、重复 start、inactive、两条 final 顺序。
 - 全量 Python **395 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-05：capture 生命周期与转写会话
+
+基线 `19ce233`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 接线
+
+- lifespan 打开数据库后创建 `TranscriptHandler`（Assembler/Buffer/Store/广播）。
+- ASR 广播改为 `asr_events`：先广播 `asr.*`，再把 `asr.final` 交给 Handler；
+  Handler 异常只记录日志，不影响 ASR 事件与采集。
+- `capture.start` 回调：
+  1. 生成 `sess_<uuid>`，`handler.start(generation)`；
+  2. 再启动 `AsrCoordinator`。
+- `capture.stop` 回调：先 `asr.stop()`，再 `handler.stop("capture_stopped")`；
+  `asr.stop` 抛错也会在 finally 中结束转写会话。
+- 新 generation 启动时 Handler 先按 `generation_changed` 结束旧会话。
+- Core shutdown：controller.shutdown → asr.stop → handler.stop("shutdown")，
+  Handler 幂等，不重复写结束时间。
+
+### 失败隔离
+
+- 转写落库/广播异常被 Handler 捕获并计数，不向 ASR/采集链路上抛。
+- `asr_events` 对 Handler 再包一层异常保护，避免转写故障中断事件广播。
+
+### 测试
+
+新增 4 个应用级测试：capture start 建会话+final 落库、generation 切换结束旧会话、
+shutdown 结束活动会话、无会话时 asr.final 忽略。
+全量 Python **399 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

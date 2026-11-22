@@ -375,3 +375,14 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | Schema | `transcript.segment/reset` 通过 JSON Schema；fixtures 覆盖全部 EVENT_TYPES |
 | Handler | 仅处理 asr.final；重复只一次；stop flush + reset；广播失败仍落库 |
 | 运行时 | capture 生命周期接入在 P34-05 验证 |
+
+
+### P34-05 生命周期
+
+| 类别 | 断言 |
+|---|---|
+| capture start | 建 `sess_*` 会话并启动 ASR；final 落库 |
+| generation | 新 generation 结束旧会话，旧会话 status=completed |
+| capture stop | flush + 结束会话；ASR stop 失败也执行 |
+| shutdown | 活动会话被结束；Handler 幂等 |
+| 隔离 | 转写异常不影响 ASR 广播/采集 |
