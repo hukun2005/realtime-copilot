@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .classifier import Detection, QuestionType, detect_question
 from .followup import FollowUpResolver
+from .review import QuestionReviewer, apply_review
 from .state import Question, QuestionState, QuestionStore
 from .transcript import TranscriptEntry, TranscriptLog
 
@@ -11,11 +12,18 @@ from .transcript import TranscriptEntry, TranscriptLog
 class QuestionEngine:
     """唯一入口：partial 只更新转写，final 才进入检测。"""
 
-    def __init__(self, *, generation: int = 0, context_timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        *,
+        generation: int = 0,
+        context_timeout: float = 120.0,
+        reviewer: QuestionReviewer | None = None,
+    ) -> None:
         self.transcripts = TranscriptLog(generation=generation)
         self.resolver = FollowUpResolver(timeout_seconds=context_timeout)
         self.store = QuestionStore()
         self.last_error: str | None = None
+        self.reviewer = reviewer
 
     def ingest_partial(
         self,
@@ -56,6 +64,11 @@ class QuestionEngine:
                 segment_id=entry.segment_id,
                 has_context=self.resolver.has_context(entry.source),
             )
+            if self.reviewer is not None:
+                detection = apply_review(
+                    detection,
+                    self.reviewer.review(text=entry.text, detection=detection),
+                )
             if not detection.is_question:
                 return None, detection
             parent_id, reason = self.resolver.resolve(detection)

@@ -1597,7 +1597,35 @@ Python **372 passed / 3 skipped**；ruff 通过；C#/协议/桌面未改。
 - 未接 LLM 复核、未生成 answer 事件、未接 UI。
 - 真实会议/真人对话准确率 **NOT_MEASURED**。
 
+## 2026-11-22 · P4 补充：LLM Review / Answer 接口
+
+基线 `eae7e5a`（P4 + P3.4/P3.5 已合并）。
+
+### 范围
+
+本补充只完成**可插拔接口**，不接在线 LLM、不产生真实答案：
+
+- `detection/review.py`：`QuestionReviewer` 协议、`ReviewDecision`、`NoopReviewer`、
+  `apply_review()`。可修正 is_question/type/confidence/reason，不能绕过引擎入口。
+- `detection/answer.py`：`AnswerProvider` 协议、`AnswerResult`、`UnavailableAnswerProvider`、
+  `answer_question()`；负责 CONFIRMED → ANSWERING → ANSWERED/FAILED 迁移，Provider 失败进 FAILED。
+- `QuestionEngine(reviewer=...)` 可选注入；默认不注入，规则检测行为不变。
+
+### 状态
+
+- 真实 DeepSeek/任何在线模型：**NOT_RUN / NOT_CONFIGURED**。
+- 现有测试全部用 Mock Reviewer / 假 AnswerProvider；没有把 Mock 结果写成真实模型效果。
+- 未新增协议事件、未接 UI、未保存答案。
+
+### 测试
+
+新增 6 个：review 覆盖类型/置信度、review 丢弃问题、无决定 no-op、answer 成功迁移、
+answer 失败 FAILED、未 CONFIRMED 拒绝。
+
+全量 Python **452 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
