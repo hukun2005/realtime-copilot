@@ -21,6 +21,8 @@ export type EventV1 =
   | AsrPartialEvent
   | AsrFinalEvent
   | AsrErrorEvent
+  | TranscriptSegmentEvent
+  | TranscriptResetEvent
 /**
  * 事件唯一标识；由发送方生成，接收方只用于日志与关联，不承担幂等语义。
  */
@@ -75,6 +77,10 @@ export type AsrSegmentId = string
  * 识别来源；与采集来源枚举保持一致，但独立演进。
  */
 export type AsrSource = 'loopback' | 'mic'
+/**
+ * 一次采集会话的稳定标识。
+ */
+export type SessionId = string
 
 export interface HelloEvent {
   v: 1
@@ -282,4 +288,36 @@ export interface AsrErrorPayload {
   message: string
   segmentId?: AsrSegmentId | null
   retryable: boolean
+}
+export interface TranscriptSegmentEvent {
+  v: 1
+  type: 'transcript.segment'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: TranscriptSegmentPayload
+}
+export interface TranscriptSegmentPayload {
+  sessionId: SessionId
+  segmentId: AsrSegmentId
+  source: AsrSource
+  startTsNs: number
+  endTsNs: number
+  text: string
+  revision: number
+  generation: number
+  provider?: string | null
+}
+export interface TranscriptResetEvent {
+  v: 1
+  type: 'transcript.reset'
+  eventId: EventId
+  requestId?: RequestId
+  ts: number
+  payload: TranscriptResetPayload
+}
+export interface TranscriptResetPayload {
+  sessionId: SessionId
+  generation: number
+  reason: 'capture_stopped' | 'generation_changed' | 'error' | 'shutdown'
 }

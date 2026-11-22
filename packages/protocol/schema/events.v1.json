@@ -1046,6 +1046,159 @@
           ]
         }
       }
+    },
+    "SessionId": {
+      "title": "SessionId",
+      "type": "string",
+      "pattern": "^sess_[A-Za-z0-9_-]{8,64}$",
+      "description": "一次采集会话的稳定标识。"
+    },
+    "TranscriptSegmentPayload": {
+      "title": "TranscriptSegmentPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionId",
+        "segmentId",
+        "source",
+        "startTsNs",
+        "endTsNs",
+        "text",
+        "revision",
+        "generation"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "segmentId": {
+          "$ref": "#/$defs/AsrSegmentId"
+        },
+        "source": {
+          "$ref": "#/$defs/AsrSource"
+        },
+        "startTsNs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endTsNs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
+      }
+    },
+    "TranscriptResetPayload": {
+      "title": "TranscriptResetPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionId",
+        "generation",
+        "reason"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "capture_stopped",
+            "generation_changed",
+            "error",
+            "shutdown"
+          ]
+        }
+      }
+    },
+    "TranscriptSegmentEvent": {
+      "title": "TranscriptSegmentEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "transcript.segment"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/TranscriptSegmentPayload"
+        }
+      }
+    },
+    "TranscriptResetEvent": {
+      "title": "TranscriptResetEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "transcript.reset"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/TranscriptResetPayload"
+        }
+      }
     }
   },
   "oneOf": [
@@ -1084,6 +1237,12 @@
     },
     {
       "$ref": "#/$defs/AsrErrorEvent"
+    },
+    {
+      "$ref": "#/$defs/TranscriptSegmentEvent"
+    },
+    {
+      "$ref": "#/$defs/TranscriptResetEvent"
     }
   ]
 }

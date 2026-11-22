@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,6 +30,12 @@ from .memory import process_memory
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
 from .storage import close, open_database
 from .tickets import TicketIssuer
+from .transcript import (
+    TranscriptAssembler,
+    TranscriptBuffer,
+    TranscriptHandler,
+    TranscriptStore,
+)
 from .ws.connection import EventConnection
 
 logger = get_logger("copilot_core.app")
@@ -65,8 +72,14 @@ def create_app(
                 ui_connections.discard(connection)
 
     async def asr_events(event: Any) -> None:
-        """广播 ASR 事件，并把 final 送入问题检测。"""
+        """广播 ASR 事件，再依次交给转写与问题检测。"""
         await broadcast(event)
+        handler = getattr(app.state, "transcript_handler", None)
+        if handler is not None:
+            try:
+                await handler.handle(event)
+            except Exception:
+                logger.exception("transcript handler failed")
         if getattr(event, "type", None) != "asr.final":
             return
         try:
@@ -85,6 +98,13 @@ def create_app(
         app.state.audio.pipeline.start()
         database = open_database(config.database_path(data_dir))
         app.state.db = database
+        app.state.transcript_handler = TranscriptHandler(
+            assembler=TranscriptAssembler(),
+            buffer=TranscriptBuffer(),
+            store=TranscriptStore(database),
+            broadcast=broadcast,
+            logger=get_logger("copilot_core.transcript"),
+        )
         app.state.started_at = time.monotonic()
         if runtime_path is not None:
             info = build_runtime_info(
@@ -108,6 +128,9 @@ def create_app(
             await controller.shutdown()
             if asr_coordinator is not None:
                 await asr_coordinator.stop()
+            handler = getattr(app.state, "transcript_handler", None)
+            if handler is not None:
+                await handler.stop(reason="shutdown")
             await app.state.audio.pipeline.stop()
             await broadcast(make_asr_status(state=app.state.asr.state.value, since=app.state.asr.since_ms))
             close(database)
@@ -160,19 +183,48 @@ def create_app(
             get_logger("copilot_core.asr").exception("asr coordinator creation failed")
     app.state.asr_coordinator = asr_coordinator
 
+    async def on_capture_start(generation: int) -> None:
+        handler = getattr(app.state, "transcript_handler", None)
+        if handler is not None:
+            try:
+                await handler.start(
+                    f"sess_{uuid.uuid4().hex}",
+                    generation=generation,
+                    mode=config.mode,
+                )
+            except Exception:
+                logger.exception("transcript session start failed")
+        if asr_coordinator is not None:
+            await asr_coordinator.start(generation)
+
+    async def on_capture_stop() -> None:
+        try:
+            if asr_coordinator is not None:
+                await asr_coordinator.stop()
+        finally:
+            handler = getattr(app.state, "transcript_handler", None)
+            if handler is not None:
+                try:
+                    await handler.stop(reason="capture_stopped")
+                except Exception:
+                    logger.exception("transcript session stop failed")
+
     controller = CaptureController(
         config=config.capture,
         tickets=tickets,
         logger=get_logger("copilot_core.capture"),
         broadcast=broadcast,
         source_stats=lambda: app.state.audio.snapshot()["sources"],
-        on_capture_start=asr_coordinator.start if asr_coordinator is not None else None,
-        on_capture_stop=asr_coordinator.stop if asr_coordinator is not None else None,
+        on_capture_start=on_capture_start,
+        on_capture_stop=on_capture_stop,
     )
 
     app.state.asr = AsrStatusTracker()
     app.state.capture = controller
     app.state.asr_events = asr_events
+    app.state.transcript_start = on_capture_start
+    app.state.transcript_stop = on_capture_stop
+    app.state.transcript_handler = None
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
@@ -202,6 +254,11 @@ def create_app(
             "asr": (
                 app.state.asr_coordinator.snapshot()
                 if getattr(app.state, "asr_coordinator", None) is not None
+                else None
+            ),
+            "transcript": (
+                app.state.transcript_handler.snapshot()
+                if getattr(app.state, "transcript_handler", None) is not None
                 else None
             ),
             "process": process_memory(),

@@ -49,6 +49,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "asr.partial",
     "asr.final",
     "asr.error",
+    "transcript.segment",
+    "transcript.reset",
 )
 
 ConcreteEvent: TypeAlias = (

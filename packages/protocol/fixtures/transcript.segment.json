@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "type": "transcript.segment",
+  "eventId": "evt_transcript_seg_0001",
+  "ts": 1763700000000,
+  "payload": {
+    "sessionId": "sess_20261122abcd",
+    "segmentId": "seg_0001",
+    "source": "loopback",
+    "startTsNs": 1000000000,
+    "endTsNs": 2000000000,
+    "text": "大家好，这是一次转写测试。",
+    "revision": 1,
+    "generation": 1,
+    "provider": "paraformer"
+  }
+}

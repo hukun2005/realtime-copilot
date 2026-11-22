@@ -368,6 +368,91 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 稳定性 | 30 分钟单来源、60 分钟双来源 PASS（TTS） |
 
 
+### P34-04 transcript 协议
+
+| 类别 | 断言 |
+|---|---|
+| Schema | `transcript.segment/reset` 通过 JSON Schema；fixtures 覆盖全部 EVENT_TYPES |
+| Handler | 仅处理 asr.final；重复只一次；stop flush + reset；广播失败仍落库 |
+| 运行时 | capture 生命周期接入在 P34-05 验证 |
+
+
+### P34-05 生命周期
+
+| 类别 | 断言 |
+|---|---|
+| capture start | 建 `sess_*` 会话并启动 ASR；final 落库 |
+| generation | 新 generation 结束旧会话，旧会话 status=completed |
+| capture stop | flush + 结束会话；ASR stop 失败也执行 |
+| shutdown | 活动会话被结束；Handler 幂等 |
+| 隔离 | 转写异常不影响 ASR 广播/采集 |
+
+
+### P34-06 指标
+
+| 类别 | 断言 |
+|---|---|
+| snapshot | assembled/persisted/持久化错误/广播错误、装配与缓冲计数 |
+| 隐私 | snapshot 不含转写正文 |
+| healthz | `/healthz.transcript` 反映 active/generation/persisted |
+
+
+### P34-07 集成验收
+
+| 类别 | 断言 |
+|---|---|
+| 真实链路 | WASAPI → Paraformer → asr.final → transcript.segment → SQLite |
+| 会话 | capture.start 建会话，capture.stop 后 status=completed |
+| 持久化 | Core 停止后重新打开 DB 仍可查询会话与 Segment |
+| 失败策略 | 转写/广播失败不阻断 ASR；短测帧率阈值 0.85，长测 1.0 |
+
+
+### P35-01 数据集
+
+| 类别 | 断言 |
+|---|---|
+| manifest | 结构、唯一 id、文件存在、SHA-256 |
+| 音频 | 16k/16-bit/mono，时长与 manifest 一致 |
+| 覆盖 | clean/technical/numbers/mixed/filler/long/noisy/silence |
+| 隐私 | 仓库仅合成音频，真实会议在 evaluation/local/ 且不提交 |
+
+
+### P35-02 CER/WER
+
+| 类别 | 断言 |
+|---|---|
+| 归一化 | NFKC、小写、去标点；CER 去空白，WER 分 Latin 词/CJK 字 |
+| 对齐 | 替换/插入/删除计数、空假设、空参考 |
+| 汇总 | micro/macro、分类、静音幻觉单独统计 |
+| 报告 | JSON/Markdown 不含正文；oracle 仅自检 |
+
+
+### P35-03 Provider 对比
+
+| 类别 | 断言 |
+|---|---|
+| 状态 | 缺 Key => NOT_RUN；失败 => ERROR/PARTIAL，不伪装 PASS |
+| Aliyun | 11/11 假设，10 计分 + 1 静音；CER/WER 由工具计算 |
+| 报告 | 假设 JSON + CER/WER + 汇总，注明 TTS 非会议 |
+
+
+### P35-04 延迟
+
+| 类别 | 断言 |
+|---|---|
+| 分位 | 最近秩 P50/P95；空序列/无 final 正确处理 |
+| 口径 | first partial/final/finalization 分开；注明非回答延迟 |
+| Provider | 缺 Key => NOT_RUN；静音无 final 不计入分位 |
+
+
+### P35-05 长时间稳定性
+
+| 类别 | 断言 |
+|---|---|
+| 30 分钟 | 单来源，ASR/转写错误 0，会话 completed |
+| 60 分钟 | 双来源，ASR/转写错误 0，会话 completed |
+| 资源 | 连接次数、PCM 峰值、内存、丢帧/丢段 |
+| 绑定 | 报告记录 SHA、gitDirty、Windows、模型 |
 ### P4 问题检测
 
 | 类别 | 断言 |

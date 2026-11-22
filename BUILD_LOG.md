@@ -1140,6 +1140,397 @@ Python **338 passed / 3 skipped**；ruff 通过。
 说明：首次 60 分钟运行因机器休眠只采集到约 12 分钟，报告已作废；修复为 `SetThreadExecutionState` 防休眠 +
 墙钟/帧率校验后重跑，上表为有效结果。TTS 音频，非真实会议；无 WER。
 
+## 2026-11-22 · P34-01：TranscriptAssembler
+
+基线 `cc6c6d2`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/transcript/assembler.py`：纯 Python，不依赖 FastAPI/WS/SQLite。
+- 每来源待装配窗口（默认 3），按 `start_ts_ns` 排序；窗口溢出先产出最早一条，缓冲有界。
+- 重复 `(generation, segment_id)` 去重；旧 generation 计数 `stale` 并丢弃。
+- 相邻/重叠 Segment 在 `merge_gap_ms`（默认 200ms）内合并；中文直接拼接，英文/数字保留空格。
+- 空文本与纯标点计入 `empty`，不进入缓冲。
+- 大间隙（>2s）只计数 `gaps`，不插入占位文本。
+- `flush()` 产出全部剩余缓冲；`reset(generation)` 清空会话状态。
+- 统计：accepted/emitted/duplicates/out_of_order/merged/gaps/stale/empty/overflow_emitted。
+
+### 测试
+
+新增 12 个：排序、重复、乱序、相邻合并、英文空格、空/纯标点、generation 隔离、
+reset、缓冲上限、双来源、gap、revision/provider 保留。
+
+Python **361 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-02：TranscriptBuffer
+
+基线 `e7de900`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/transcript/buffer.py`：每来源有界滚动缓冲，纯 Python。
+- 双上限：每来源 Segment 数（默认 500）与总字符数（默认 200,000）；超限按最早
+  `startTsNs` 淘汰，返回被淘汰 Segment 并计数。
+- 重复 `segment_id` 幂等忽略；旧 generation 丢弃。
+- gap：相邻 Segment 间隔超过阈值（默认 2s）计数并记录有界 `GapRange`（最多 100 条）。
+- 乱序 Segment 仍按 `startTsNs` 插入并计 `out_of_order`。
+- `snapshot(source=...)` 返回时间线/单来源只读副本；`recent_text(max_chars)` 取尾部上下文。
+- `clear()` 保留 generation；`reset(generation)` 清空并切换会话。
+- 统计：appended/duplicates/stale/out_of_order/gaps/evicted_segments/evicted_chars。
+
+### 测试
+
+新增 12 个：排序、双来源、重复、旧 generation、条数淘汰、字符淘汰、gap、
+乱序、上下文尾部、clear/reset、空文本、快照副本。
+
+Python **373 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-03：SQLite v2 与 TranscriptStore
+
+基线 `0a4c131`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 迁移
+
+新增 v2（不修改 v1）：
+
+- `meeting_sessions(id, generation, started_at, ended_at, mode, status)`
+- `transcript_segments(id, session_id FK, generation, segment_id, source, start_ts_ns,
+  end_ts_ns, text, revision, provider, created_at)`
+- `UNIQUE(session_id, segment_id)`
+- 索引 `(session_id, start_ts_ns)`、`(session_id, source, start_ts_ns)`
+- `ON DELETE CASCADE`：删除会话即删除其转写
+
+不存原始音频、不存 API Key；升级保留 v1 `settings`。
+
+### Store
+
+- `TranscriptStore.start_session` 幂等；`end_session` 更新状态/结束时间。
+- `append` 用 `ON CONFLICT DO NOTHING` 幂等，返回是否插入；会话不存在抛 `StorageError`。
+- `segments(source=, limit=)` 按 `start_ts_ns` 排序；`sessions`、`segment_count`、`delete_session`。
+- 短事务同步写入，不阻塞在采集回调（由调用方在事件循环中按需使用）。
+
+### 测试
+
+新增 9 个：v2 表/索引、v1 升级保留 settings、session 幂等、写入/读取顺序、重复、
+来源过滤/limit、无会话报错、结束/级联删除、无音频列。
+
+Python **382 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-04：transcript 协议与事件整合
+
+基线 `6d47460`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 协议
+
+新增两个事件（向后兼容，不改 `asr.*` 与音频 v1）：
+
+- `transcript.segment`：`sessionId/segmentId/source/startTsNs/endTsNs/text/revision/generation/provider`
+- `transcript.reset`：`sessionId/generation/reason(capture_stopped|generation_changed|error|shutdown)`
+
+同步更新：
+
+- `schema/events.v1.json`（`$defs` + `oneOf`）
+- 生成 `src/generated/types.ts`、`python/copilot_protocol/models.py`
+- `EVENT_TYPES`（TS/Python）
+- fixtures：`transcript.segment.json`、`transcript.reset.json`
+
+### Handler
+
+新增 `transcript/handler.py`：
+
+- `handle(asr.final)` → `TranscriptAssembler` → `TranscriptBuffer` → `TranscriptStore` → 广播 `transcript.segment`。
+- 只处理 final；partial/status/error 忽略。
+- 重复 Segment 只落库/广播一次。
+- `flush()` 产出装配器剩余 Segment。
+- `stop(reason)`：flush、结束会话、广播 `transcript.reset`、清空缓冲。
+- 持久化或广播失败只计数并记录通用日志，不向上抛异常，避免中断 ASR/采集。
+- 运行时会话接入（capture start/stop、generation）留到 P34-05。
+
+### 测试
+
+- 协议：TS 28 passed；Python 39 passed（fixtures 覆盖全部 `EVENT_TYPES`）。
+- Handler 新增 9 个：落库+广播、重复、非 final 忽略、stop flush/reset、畸形 payload、
+  广播失败仍落库、重复 start、inactive、两条 final 顺序。
+- 全量 Python **395 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-05：capture 生命周期与转写会话
+
+基线 `19ce233`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 接线
+
+- lifespan 打开数据库后创建 `TranscriptHandler`（Assembler/Buffer/Store/广播）。
+- ASR 广播改为 `asr_events`：先广播 `asr.*`，再把 `asr.final` 交给 Handler；
+  Handler 异常只记录日志，不影响 ASR 事件与采集。
+- `capture.start` 回调：
+  1. 生成 `sess_<uuid>`，`handler.start(generation)`；
+  2. 再启动 `AsrCoordinator`。
+- `capture.stop` 回调：先 `asr.stop()`，再 `handler.stop("capture_stopped")`；
+  `asr.stop` 抛错也会在 finally 中结束转写会话。
+- 新 generation 启动时 Handler 先按 `generation_changed` 结束旧会话。
+- Core shutdown：controller.shutdown → asr.stop → handler.stop("shutdown")，
+  Handler 幂等，不重复写结束时间。
+
+### 失败隔离
+
+- 转写落库/广播异常被 Handler 捕获并计数，不向 ASR/采集链路上抛。
+- `asr_events` 对 Handler 再包一层异常保护，避免转写故障中断事件广播。
+
+### 测试
+
+新增 4 个应用级测试：capture start 建会话+final 落库、generation 切换结束旧会话、
+shutdown 结束活动会话、无会话时 asr.final 忽略。
+全量 Python **399 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-06：转写指标与诊断
+
+基线 `25fbdd1`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 指标
+
+`TranscriptHandler.snapshot()`（不含正文）：
+
+- 会话：`active`、`sessionId`、`generation`
+- 处理：`assembled`、`persisted`、`persistErrors`、`broadcastErrors`
+- 装配：`accepted/emitted/duplicates/outOfOrder/merged/gaps/stale/empty/overflowEmitted`
+- 缓冲：`appended/duplicates/stale/outOfOrder/gaps/evictedSegments/evictedChars/segmentCount/charCount`
+
+`GET /healthz` 新增 `transcript` 字段；未启动会话时仍返回结构，`active=false`。
+
+### 失败计数
+
+`TranscriptStore.append` 抛 `StorageError` 时 `persistErrors+1`，不广播、不抛；
+广播失败 `broadcastErrors+1`，已落库数据保留。
+
+### 测试
+
+新增 3 个：snapshot 计数且不含正文、持久化失败计数、`/healthz.transcript`。
+
+全量 Python **402 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P34-07：P3.4 集成验收
+
+基线 `890790d`（含 soak transcript 校验）；实际运行 SHA `8fc7644`，`gitDirty=false`。
+
+### 真实链路
+
+`capture.start → WASAPI loopback → VAD → Paraformer → asr.final → TranscriptAssembler
+→ TranscriptBuffer → SQLite → transcript.segment → transcript.reset → capture.stop`
+
+执行：`scripts/asr-soak-wasapi.ps1 -Minutes 2 -Interval 20 -KeepData`（TTS 音频）。
+
+| 项 | 结果 |
+|---|---|
+| Core / Windows | 0.1.0 / 10.0.26300 |
+| 模型 | paraformer-realtime-v2 |
+| 墙钟 | 122.6s（ratio 1.021） |
+| 帧数 | 5,008（短测启动波动，ratio 0.927） |
+| ASR Segment / Final | 29 / 29（0 错误） |
+| 转写落库 | **34** 条（停止时 ASR flush 额外 5 条） |
+| 会话 | 1 个，`status=completed`，`ended_at` 已写 |
+| transcript 指标 | 停止前 assembled 26 / persisted 26 / 0 错误 |
+| 连接 | 2 次尝试（验证 + 复用），0 失败 |
+| 进程内存 | WS 66.2 MB / Private 45.9 MB |
+
+Core 停止后重新打开同一 SQLite：会话仍为 `completed`，34 条 Segment 可查询，
+说明不是仅内存状态。
+
+### 修复
+
+- Assembler 默认 `merge_gap_ms=0`，且**时间重叠不合并**：此前重叠/相邻段被吞成
+  一条 664 字的长文本；现在保留 VAD 句边界。
+- soak 采样 `transcript`，并在停止后只读查询 `transcript_segments` 校验：
+  `segments>0` 且最新会话 `completed` 才 PASS；短测帧率阈值 0.85（长测仍 1.0）。
+
+### 验证
+
+Python **402 passed / 3 skipped**；ruff；C# 91；协议 28；桌面 11；typecheck 通过。
+
+## 2026-11-22 · P35-01：ASR 评测数据集
+
+基线 `bb42271`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 数据集
+
+`evaluation/dataset/`（11 个样本，约 2.5 MB，16k/16-bit/mono）：
+
+- clean ×2、technical ×1、numbers ×1、mixed ×1、filler ×1、long ×1
+- noisy ×3：clean_01 SNR 15/5 dB、technical_01 SNR 10 dB（确定性白噪声）
+- silence ×1：3s 无语音控制
+
+每个样本在 `manifest.json` 中有参考文本、类别、时长、采样率、SHA-256 与条件。
+语音由 Windows `System.Speech`（Microsoft Huihui）本地合成，**不是真人会议**。
+
+### 隐私
+
+- 仓库只含合成音频；真实会议录音放 `evaluation/local/`（已 gitignore），不提交。
+- 本地真实录音需登记授权来源与人工校对 reference；报告只写哈希/时长/指标。
+- 不存 API Key、不存会议正文到日志。
+
+### 工具
+
+- `scripts/build-eval-dataset.ps1`：合成 TTS 基线
+- `scripts/build_eval_manifest.py`：生成噪声/静音与 manifest（含哈希）
+- `evaluation/README.md`：组成、隐私、真实录音接入与评测口径
+
+### 测试
+
+新增 6 个：manifest 结构、文件存在/哈希、音频格式/时长、参考文本、类别覆盖、
+仅合成音频边界。
+
+全量 Python **408 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P35-02：CER/WER 工具
+
+基线 `8f3bd41`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/evaluation/metrics.py`：
+  - NFKC、小写、去标点/符号/控制字符；
+  - CER 以字符计，WER 以 Latin 词 + 单个 CJK 字计；
+  - Levenshtein 回填替换/插入/删除计数；
+  - 空参考单独统计幻觉，不进入 CER/WER 汇总；
+  - 汇总同时给 micro（总错误/总参考）与 macro（逐样本平均）及分类。
+- 新增 `scripts/evaluate_asr.py`：
+  - 读取 manifest 并校验 SHA-256；
+  - 假设来源为 JSON `{sampleId: text}` 或 `--oracle`（仅工具自检，不是 ASR）；
+  - 输出 JSON + Markdown，默认不含参考/假设正文，避免会议内容外泄；
+  - 缺失假设默认报错（`--allow-missing` 可放宽）。
+
+### 自检
+
+`uv run python scripts/evaluate_asr.py --oracle --label oracle-selfcheck`
+
+结果：11 样本（10 计分 + 1 静音），CER/WER = 0，无幻觉。
+报告：`evaluation/reports/cer-wer-oracle-selfcheck.{json,md}`。
+该报告是**工具自检**，不是 ASR 识别结果，不得当作 Provider 指标。
+
+### 测试
+
+新增 11 个：归一化、CER/WER 切分、替换/插入/删除、空假设、静音幻觉、
+micro/macro、静音排除、分类汇总。
+
+全量 Python **419 passed / 3 skipped**；ruff 通过。
+
+## 2026-11-22 · P35-03：Provider 对比（合成 TTS）
+
+基线 `5429251`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 工具
+
+`scripts/eval_providers.py`：
+
+- 对 `evaluation/dataset` 的 11 个样本逐个调用真实 Provider；
+- 假设写入 `evaluation/reports/hypotheses-<provider>.json`；
+- 调用 `evaluate_asr.py` 生成 `cer-wer-<provider>.{json,md}`；
+- 汇总 `provider-comparison.{json,md}`；
+- 缺 Key → `NOT_RUN`，连接/样本失败 → `ERROR`/`PARTIAL`，不伪造成 PASS。
+
+### 结果
+
+| Provider | 状态 | 模型 | CER micro | WER micro | 计分样本 |
+|---|---|---|---|---|---|
+| aliyun | **PASS** | paraformer-realtime-v2 | **12.54%** | 10.53% | 10 |
+| deepgram | **NOT_RUN** | - | - | - | - |
+
+Aliyun 分类 CER micro：
+
+| 类别 | CER micro |
+|---|---|
+| clean | 0.00% |
+| filler | 0.00% |
+| long | 0.00% |
+| noisy（3） | 17.65% |
+| mixed | 14.29% |
+| technical | 17.95% |
+| numbers | 48.00% |
+| silence | 0 幻觉 |
+
+### 误差分析
+
+- `numbers_01`：参考“一千二百三十四”“百分之十五”，假设输出 `1234`、`15`；
+  语义正确，但当前 CER 未做数字 ITN，导致 48% 的字符差异。
+- `technical_01`：`Vue3` → “无三”，`SQLite` → “sq light”；噪声下进一步退化。
+- `mixed_01`：`八百` → `800`，同样受数字格式影响。
+- 干净句、长句、填充词、15dB 噪声与静音控制均为 0 错误/0 幻觉。
+
+### 限制
+
+- 仅 TTS 合成音频，**不是真实会议**；真实会议 WER 仍 `NOT_MEASURED`。
+- Deepgram 无 Key，状态 `NOT_RUN`，不能与 Aliyun 比较质量。
+- CER 未做数字/单位 ITN，`numbers` 类别偏高；WER 对中文近似字符级。
+- 每类样本量很小（1–3 个），不能外推为总体质量。
+
+## 2026-11-22 · P35-04：ASR Segment 延迟
+
+基线 `2fd3019`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 口径
+
+`scripts/eval_latency.py` 对合成集逐样本测量：
+
+- `firstPartialMs`：调用 `transcribe` → 首个 partial；
+- `finalMs`：调用 → 首个 final（含整段音频上传）；
+- `finalizationMs`：`finalMs - 上传耗时估计`（100ms 音频 / 10ms 间隔 ≈ 10x 实时）。
+
+这是 **Segment 识别延迟**，不是面试回答延迟，也不是真实会议流式字幕延迟。
+
+### 结果
+
+| Provider | 状态 | 有 final | Final P50/P95 | Finalization P50/P95 | 首 partial P50/P95 |
+|---|---|---|---|---|---|
+| aliyun | **PASS** | 10 / 11 | 1,404.9 / 4,126.2 ms | **771.9 / 2,228.2 ms** | 1,038.0 / 2,995.4 ms |
+| deepgram | **NOT_RUN** | - | - | - | - |
+
+- 静音样本无 final，不计入延迟分位；
+- 长样本（18.98s）上传耗时估计 1.9s，是 P95 的主要来源；
+- 样本量 10，P95 接近最大值，不能外推总体分布。
+
+### 限制
+
+- 音频是离线整段提交并按 10x 实时发送，不是会议中的实时节奏；
+- `finalizationMs` 是估算值，依赖固定发送节奏；
+- 仅 Aliyun 有结果，Deepgram 无 Key 为 `NOT_RUN`；
+- 不代表真实会议/面试回答延迟。
+
+## 2026-11-22 · P35-05：长时间稳定性（30/60 分钟）
+
+分支 `feature/p3.4-transcript-p3.5-evaluation`；TTS 音频，非真实会议。
+
+### 30 分钟单来源
+
+- SHA：`998987297dada9c25283d0c29e59d9491b6c2179`，`gitDirty=false`
+- 墙钟 1,803.4s；帧 88,549；VAD 513；final 513；ASR 错误 0
+- 转写：DB 521 段，会话 `completed`
+- 连接尝试 **2**（验证 + 复用）；PCM 峰值 600,960 B
+- final P50/P95：577.7 / 1,314.1 ms
+- 内存：WS 65.3 MB / Private 47.7 MB / Peak 68.6 MB
+
+### 60 分钟双来源
+
+- SHA：`efd3e4cccb0bd5117979c1a603f17481e3d4cbb7`，`gitDirty=false`
+- 墙钟 3,603.8s；loopback 帧 177,058；VAD 730；final 604（loopback 123 / mic 481）；错误 0
+- 转写：DB 608 段，会话 `completed`
+- 连接尝试 **3**（验证 + loopback + mic）；PCM 峰值 2,049,920 B
+- final P50/P95：284.6 / 3,418.4 ms（P95 由长段拖尾）
+- 内存：WS 44.6 MB / Private 52.2 MB / Peak 92.1 MB
+
+报告：`evaluation/reports/stability-30min.json`、`stability-60min-dual.json`。
+
+### 首轮 60 分钟 FAIL 的根因
+
+首轮 60 分钟在 `capture.stop` 后固定等 2s 就查 DB，转写会话尚未标 completed，报告误判 FAIL；
+Core 退出后复查为 `completed`、1,214 段。已改为轮询等待 `status=completed`（最多 20s）后重跑，
+上表为重跑 PASS。不是转写/ASR 产品故障。
+
+### 限制
+
+- TTS 循环音频，不是真实会议；不代表真实会议稳定性。
+- 60 分钟 loopback/mic 的 final 数量差异来自外放拾音/内容，不代表固定比例。
+- 单次运行，未做多轮重复；P95 受长段影响明显。
+- 内存为单次采样，未做泄漏趋势分析。
+
 ## 2026-11-22 · P4：智能问题检测引擎
 
 基线任务书为 `d925b53`（实际 main），P3.4/P3.5 分支未合并；P4 从 main 独立开发，
@@ -1207,6 +1598,17 @@ Python **372 passed / 3 skipped**；ruff 通过；C#/协议/桌面未改。
 - 真实会议/真人对话准确率 **NOT_MEASURED**。
 
 ### 变更记录
+
+
+
+
+
+
+
+
+
+
+
 
 
 

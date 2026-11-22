@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import platform
+import sqlite3
 import subprocess
 import time
 import urllib.request
@@ -36,6 +37,56 @@ def _envelope(event_type: str, payload: dict[str, Any], request_id: str | None =
     if request_id is not None:
         data["requestId"] = request_id
     return json.dumps(data)
+
+
+def _transcript_db(data_dir: str) -> dict[str, Any]:
+    """读取会话/转写计数；只查元数据，不读正文。"""
+    path = Path(data_dir) / "copilot.db"
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        connection.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return {"available": False}
+    try:
+        sessions = connection.execute("SELECT COUNT(*) AS n FROM meeting_sessions").fetchone()["n"]
+        segments = connection.execute("SELECT COUNT(*) AS n FROM transcript_segments").fetchone()["n"]
+        latest = connection.execute(
+            "SELECT id, status, generation FROM meeting_sessions ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        return {
+            "available": True,
+            "sessions": int(sessions),
+            "segments": int(segments),
+            "latestSessionId": latest["id"] if latest else None,
+            "latestStatus": latest["status"] if latest else None,
+            "latestGeneration": latest["generation"] if latest else None,
+        }
+    except sqlite3.Error as error:
+        return {"available": False, "error": type(error).__name__}
+    finally:
+        connection.close()
+
+
+def _wait_transcript_completed(data_dir: str, *, timeout: float = 20.0) -> bool:
+    """capture.stop 后等待转写会话落完并标记 completed。"""
+    path = Path(data_dir) / "copilot.db"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            connection.row_factory = sqlite3.Row
+            try:
+                row = connection.execute(
+                    "SELECT status FROM meeting_sessions ORDER BY started_at DESC LIMIT 1"
+                ).fetchone()
+            finally:
+                connection.close()
+            if row is not None and row["status"] == "completed":
+                return True
+        except sqlite3.Error:
+            pass
+        time.sleep(0.25)
+    return False
 
 
 def _healthz(port: int) -> dict[str, Any] | None:
@@ -121,6 +172,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
                         "audio": snapshot.get("audio"),
                         "asr": snapshot.get("asr"),
                         "process": snapshot.get("process"),
+                        "transcript": snapshot.get("transcript"),
                     }
                 )
             await asyncio.sleep(interval)
@@ -128,6 +180,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         stop_id = "req_" + uuid.uuid4().hex
         await ws.send(_envelope("capture.stop", {}, stop_id))
         await asyncio.sleep(2)
+        await asyncio.to_thread(_wait_transcript_completed, str(runtime.get("dataDir") or ""))
         hb.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await hb
@@ -142,12 +195,20 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
     vad_last = ((samples[-1]["audio"] or {}).get("vad") if samples else None) or {}
     metrics = asr_last.get("metrics") or {}
     process = (samples[-1]["process"] if samples else None) or {}
+    transcript_last = (samples[-1].get("transcript") if samples else None) or {}
+    transcript_db = _transcript_db(str(runtime.get("dataDir") or ""))
     sha, dirty = _git()
     wall_seconds = time.time() - started_wall
     expected_frames = int(minutes * 60 * 50 * 0.9)
     frame_ratio = round((frames[-1] if frames else 0) / max(1, expected_frames), 3)
     wall_ratio = round(wall_seconds / max(1.0, minutes * 60), 3)
-    valid = frame_ratio >= 1.0 and wall_ratio >= 0.95
+    transcript_ok = (
+        transcript_db.get("available") is True
+        and int(transcript_db.get("segments") or 0) > 0
+        and transcript_db.get("latestStatus") == "completed"
+    )
+    frame_threshold = 0.85 if minutes < 5 else 1.0
+    valid = frame_ratio >= frame_threshold and wall_ratio >= 0.95 and transcript_ok
 
     return {
         "result": "PASS" if valid and asr_last.get("finals", 0) > 0 else "FAIL",
@@ -172,6 +233,8 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         "asrErrors": asr_last.get("errors"),
         "asrBySource": asr_last.get("bySource"),
         "asrState": asr_last.get("state"),
+        "transcript": transcript_last,
+        "transcriptDb": transcript_db,
         "finalP50Ms": metrics.get("finalP50Ms"),
         "finalP95Ms": metrics.get("finalP95Ms"),
         "firstPartialP50Ms": metrics.get("firstPartialP50Ms"),

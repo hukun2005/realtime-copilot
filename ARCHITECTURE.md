@@ -90,9 +90,8 @@ audio frame (20ms, 16k mono PCM16, source=loopback|mic)
   → 语音段切分：START / CONTINUE / END（END 附带最后有效帧时间戳）
   → AsrProvider.stream(segment)  ── partial* ──► transcript.partial   (仅 UI 显示)
                                   └─ final  ──► transcript.segment    (进入装配)
-  → TranscriptAssembler：滚动窗口、按来源分轨、标点归一、去重
+  → TranscriptAssembler：滚动窗口、按来源分轨、标点归一、去重（P3.4 已实现）
   → QuestionDetector（规则）→ question.detected → 候选问题/类型/追问/状态机
-  → question.detected { text, confidence, source, anchorTs }
   → AnswerEngine：
         上下文 = 系统提示 + 最近 N 条转写 + KB 命中 + 用户画像
         LlmProvider.stream() → answer.start / answer.delta* / answer.end

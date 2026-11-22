@@ -42,3 +42,5 @@ secrets.*
 !packages/protocol/fixtures/**/*.wav
 
 artifacts/
+
+evaluation/local/

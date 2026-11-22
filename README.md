@@ -27,10 +27,15 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | 真人会议识别质量 | **NOT_MEASURED**（仅有 TTS 评测） |
 | Deepgram Provider（Segment 级） | 代码已实现；真实连接 **NOT_VERIFIED**（无 API Key） |
 | ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
+| 转写装配 / 缓冲 / SQLite 持久化 | **已实现**（P3.4；真实 WASAPI + Paraformer 2 分钟链路 PASS） |
 | 问题检测引擎（P4） | **已实现**：规则检测/分类/追问/状态机；人工标注集评测通过，非真实会议 |
-| 30 分钟 ASR 联合测试 | **PASS**（真实 WASAPI + 连接复用；TTS 音频，非会议） |
-| 60 分钟 ASR 联合测试 | **PASS**（双来源 + 连接复用；TTS 音频，非真人双讲） |
+| 30 分钟 ASR 联合测试 | **PASS**（真实 WASAPI + 连接复用 + 转写落库；TTS 音频） |
+| 60 分钟 ASR 联合测试 | **PASS**（双来源 + 连接复用 + 转写落库；TTS 音频，非真人双讲） |
 | 进程级 loopback（按进程采集） | 能力探测已实现；目标应用 **NOT_VERIFIED** |
+| ASR 评测数据集（合成 TTS） | **已建立**（P3.5；11 个样本，真实会议录音不入库） |
+| CER/WER 工具 | **已实现**（P3.5；含归一化、micro/macro、静音幻觉） |
+| Provider 对比（合成 TTS） | **PARTIAL**：Aliyun PASS（CER 12.54%）；Deepgram **NOT_RUN**（无 Key） |
+| Segment 延迟（合成 TTS） | **已测**：Aliyun finalization P50 771.9ms / P95 2,228.2ms；非会议实时延迟 |
 | 真实会议 WER | **NOT_MEASURED** |
 | 腾讯会议 / 微信 PC 兼容 | **NOT_VERIFIED** |
 | DeepSeek 问答、悬浮窗 | 尚未实现 |
@@ -116,7 +121,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 | Python（协议 + Core + 音频 + 控制面 + ASR + 问题检测） | `uv run pytest -q` | 372 passed, 3 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
 | C# | `dotnet test services/audio-capture/tests -c Release` | 91 passed |
-| 协议（TypeScript） | `pnpm -C packages/protocol test` | 26 passed |
+| 协议（TypeScript） | `pnpm -C packages/protocol test` | 28 passed |
 | 桌面（Vue/主进程逻辑） | `pnpm -C apps/desktop test` | 11 passed |
 | 类型检查 | `pnpm -r --if-present run typecheck` | 通过（含 vue-tsc） |
 | 握手端到端 | `pwsh -File scripts/e2e-smoke.ps1` | PASS |
