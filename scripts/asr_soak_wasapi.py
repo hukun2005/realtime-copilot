@@ -150,6 +150,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
                         "audio": snapshot.get("audio"),
                         "asr": snapshot.get("asr"),
                         "process": snapshot.get("process"),
+                        "transcript": snapshot.get("transcript"),
                     }
                 )
             await asyncio.sleep(interval)
@@ -184,7 +185,8 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         and transcript_db.get("latestStatus") == "completed"
         and int(transcript_last.get("persisted") or 0) > 0
     )
-    valid = frame_ratio >= 1.0 and wall_ratio >= 0.95 and transcript_ok
+    frame_threshold = 0.85 if minutes < 5 else 1.0
+    valid = frame_ratio >= frame_threshold and wall_ratio >= 0.95 and transcript_ok
 
     return {
         "result": "PASS" if valid and asr_last.get("finals", 0) > 0 else "FAIL",

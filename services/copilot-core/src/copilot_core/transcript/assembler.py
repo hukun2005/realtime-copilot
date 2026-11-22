@@ -7,7 +7,8 @@
 
 - 每个来源有一个待装配窗口（``reorder_window``）。窗口内按 ``start_ts_ns`` 排序；
   当窗口超出容量时先产出最早的一条，保证缓冲有界。
-- 相邻 Segment 的间隙不超过 ``merge_gap_ms`` 时合并为一条，避免 VAD 把一句话切断。
+- 相邻 Segment 重叠或间隙不超过 ``merge_gap_ms``（默认 0，仅重叠）时合并，
+  避免 VAD 把一句话切断，同时不把连续句子吞成一条。
 - 间隙超过 ``gap_threshold_ms`` 时只计数（``gaps``），不插入占位文本。
 
 去重以 ``(generation, segment_id)`` 为键；不同 generation 的迟到结果直接丢弃。
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 from typing import Final
 
 DEFAULT_REORDER_WINDOW: Final = 3
-DEFAULT_MERGE_GAP_MS: Final = 200
+DEFAULT_MERGE_GAP_MS: Final = 0
 DEFAULT_GAP_THRESHOLD_MS: Final = 2_000
 DEFAULT_MAX_PENDING: Final = 32
 
