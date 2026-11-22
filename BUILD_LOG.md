@@ -1162,7 +1162,31 @@ reset、缓冲上限、双来源、gap、revision/provider 保留。
 
 Python **361 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-02：TranscriptBuffer
+
+基线 `e7de900`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/transcript/buffer.py`：每来源有界滚动缓冲，纯 Python。
+- 双上限：每来源 Segment 数（默认 500）与总字符数（默认 200,000）；超限按最早
+  `startTsNs` 淘汰，返回被淘汰 Segment 并计数。
+- 重复 `segment_id` 幂等忽略；旧 generation 丢弃。
+- gap：相邻 Segment 间隔超过阈值（默认 2s）计数并记录有界 `GapRange`（最多 100 条）。
+- 乱序 Segment 仍按 `startTsNs` 插入并计 `out_of_order`。
+- `snapshot(source=...)` 返回时间线/单来源只读副本；`recent_text(max_chars)` 取尾部上下文。
+- `clear()` 保留 generation；`reset(generation)` 清空并切换会话。
+- 统计：appended/duplicates/stale/out_of_order/gaps/evicted_segments/evicted_chars。
+
+### 测试
+
+新增 12 个：排序、双来源、重复、旧 generation、条数淘汰、字符淘汰、gap、
+乱序、上下文尾部、clear/reset、空文本、快照副本。
+
+Python **373 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
