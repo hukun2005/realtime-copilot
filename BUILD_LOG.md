@@ -1651,7 +1651,50 @@ Answer: 652 ms（deepseek:deepseek-flash）
 新增 4 个 MockTransport 测试：鉴权/端点、Review 解析、Answer、缺 Key。
 Python **456 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P5：DeepSeek 流式回答
+
+基线 `a2a95f3`；分支 `feature/p5-streaming-answer`。
+
+### 审计
+
+现有 `DeepSeekClient` 只有 `complete()`；`DeepSeekAnswerProvider.answer()` 一次性返回；
+无 SSE、无 AnswerContext、无任务取消/generation 隔离。本阶段扩展，不重建客户端。
+
+### 实现
+
+- `DeepSeekClient.stream()`：SSE `data:` 分块、`delta.content`、`[DONE]`、HTTP 4xx/5xx、
+  超时/断网、非法 JSON；取消时关闭响应；错误不包含 Key。
+- `health_check()` / `model_info()`。
+- `AnswerContext` + `build_answer_context()` + `build_answer_messages()`：
+  question/parent/recent/resume/selected projects/project_evidence/technical_knowledge/
+  answer_style/token_budget；项目证据与通用知识分字段、分段落。
+- `DeepSeekAnswerProvider.stream()`：使用统一 Context 构建 messages。
+- `AnswerTaskManager`：generation + task_id；新任务取消旧任务；旧 generation 的 delta
+  不回调；取消/关闭幂等。
+- `scripts/llm_stream_check.py`：真实流式 + 主动取消冒烟。
+
+### 真实 API
+
+`deepseek-flash`：
+
+- 125 chunks / 249 chars，总耗时 1,190 ms；
+- 第 1 个 chunk 后取消，任务停止；
+- 单条冒烟，不代表回答质量。
+
+### 测试
+
+新增 14 个：SSE 分块/完成、非法 JSON、401/403/429/500、断网、HTTP 错误不带 Key、
+流式正常、任务抢占、取消/关闭幂等、Provider 异常、Context 分离、Answer 流式。
+Python **470 passed / 3 skipped**；ruff 通过。
+
+### 未解决
+
+- 未接 app 事件/UI；无 answer.delta 协议。
+- 未接真实项目证据/知识库（RI 阶段）。
+- 未做多轮真实对话评测。
+
 ### 变更记录
+
 
 
 

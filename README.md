@@ -29,7 +29,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
 | 转写装配 / 缓冲 / SQLite 持久化 | **已实现**（P3.4；真实 WASAPI + Paraformer 2 分钟链路 PASS） |
 | 问题检测引擎（P4） | **已实现**：规则检测/分类/追问/状态机；人工标注集评测通过，非真实会议 |
-| LLM Review / 问答 | 接口已定义；**DeepSeek 真实单条冒烟 PASS**（`deepseek-flash`）；未接 UI/协议 |
+| LLM Review / 问答 | DeepSeek 真实 Review/非流式 Answer PASS；**流式 SSE + 取消已实现**；未接 UI/协议 |
 | 30 分钟 ASR 联合测试 | **PASS**（真实 WASAPI + 连接复用 + 转写落库；TTS 音频） |
 | 60 分钟 ASR 联合测试 | **PASS**（双来源 + 连接复用 + 转写落库；TTS 音频，非真人双讲） |
 | 进程级 loopback（按进程采集） | 能力探测已实现；目标应用 **NOT_VERIFIED** |

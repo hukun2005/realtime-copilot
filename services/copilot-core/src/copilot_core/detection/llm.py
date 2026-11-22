@@ -6,17 +6,18 @@ Key 只从环境变量读取，不写入仓库、日志或报告。
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-from .answer import AnswerResult
+from .answer import AnswerContext, AnswerResult, build_answer_messages
 from .classifier import Detection, QuestionType
 from .review import ReviewDecision
 from .state import Question
@@ -58,6 +59,74 @@ class DeepSeekClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 400,
+        temperature: float = 0.0,
+    ) -> AsyncIterator[str]:
+        """SSE 流式补全；调用方取消时关闭响应。"""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "thinking": {"type": "disabled"},
+        }
+        try:
+            async with self._client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=payload,
+            ) as response:
+                if response.status_code >= 400:
+                    raise LlmError(f"DeepSeek HTTP {response.status_code}")
+                data_lines: list[str] = []
+                async for line in response.aiter_lines():
+                    if line == "":
+                        if data_lines:
+                            content = _parse_sse_data("\n".join(data_lines))
+                            data_lines.clear()
+                            if content == "__DONE__":
+                                return
+                            if content:
+                                yield content
+                        continue
+                    if line.startswith(":"):
+                        continue
+                    field, _, value = line.partition(":")
+                    if field.strip() == "data":
+                        data_lines.append(value.lstrip(" "))
+                if data_lines:
+                    content = _parse_sse_data("\n".join(data_lines))
+                    if content and content != "__DONE__":
+                        yield content
+        except LlmError:
+            raise
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError as error:
+            raise LlmError("DeepSeek stream timed out") from error
+        except Exception as error:
+            raise LlmError(f"DeepSeek stream failed: {type(error).__name__}") from error
+
+    async def health_check(self) -> bool:
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/models",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+            )
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def model_info(self) -> dict[str, str]:
+        return {"provider": "deepseek", "model": self.model, "baseUrl": self.base_url}
 
     async def complete(
         self,
@@ -135,6 +204,24 @@ def parse_review(content: str) -> ReviewDecision | None:
     )
 
 
+def _parse_sse_data(data: str) -> str | None:
+    """解析一条 SSE data；无效 JSON 视为协议错误。"""
+    if data.strip() == "[DONE]":
+        return "__DONE__"
+    try:
+        body = json.loads(data)
+    except json.JSONDecodeError as error:
+        raise LlmError("invalid SSE payload") from error
+    if not isinstance(body, dict):
+        raise LlmError("invalid SSE payload")
+    choices = body.get("choices") or []
+    if not choices:
+        return None
+    delta = choices[0].get("delta") or {}
+    content = delta.get("content")
+    return str(content) if content else None
+
+
 @dataclass
 class DeepSeekAnswerProvider:
     client: DeepSeekClient
@@ -160,3 +247,10 @@ class DeepSeekAnswerProvider:
             provider=f"deepseek:{self.client.model}",
             latency_ms=round((time.monotonic() - started) * 1000, 1),
         )
+
+    async def stream(self, *, question: Question, context: AnswerContext) -> AsyncIterator[str]:
+        async for chunk in self.client.stream(
+            build_answer_messages(context),
+            max_tokens=self.max_tokens,
+        ):
+            yield chunk
