@@ -170,3 +170,4 @@ Core: 校验 HMAC -> session -> 未使用 -> 未过期；消费后该 nonce 立�
 - PDF/DOCX 只提取文本，不执行宏或脚本；拒绝可执行文件与异常 ZIP。
 - 原文件保存在本地 `data_dir/resumes/`，不入 Git；简历文本存 SQLite。
 - 简历属个人数据，导出/备份按敏感信息处理；删除简历会级联删除项目。
+- `/api/resumes*` 必须带 `X-Copilot-Token`；Token 只在 Electron 主进程使用，不进 Renderer。

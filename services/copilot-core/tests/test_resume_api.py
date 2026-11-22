@@ -20,9 +20,11 @@ def docx_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def test_upload_list_activate_delete(client: TestClient) -> None:
+def test_upload_list_activate_delete(client: TestClient, token: str) -> None:
+    headers = {"X-Copilot-Token": token}
     response = client.post(
         "/api/resumes",
+        headers=headers,
         files={
             "file": (
                 "resume.docx",
@@ -37,17 +39,18 @@ def test_upload_list_activate_delete(client: TestClient) -> None:
     assert len(resume["projects"]) == 1
     assert resume["projects"][0]["github_urls"] == ["https://github.com/example/repo"]
 
-    assert client.get("/api/resumes").json()[0]["id"] == resume["id"]
-    assert client.post(f"/api/resumes/{resume['id']}/activate").json() == {"active": True}
-    assert client.get("/api/resumes/active").json()["id"] == resume["id"]
-    assert client.get(f"/api/resumes/{resume['id']}").status_code == 200
-    assert client.delete(f"/api/resumes/{resume['id']}").json() == {"deleted": True}
-    assert client.get(f"/api/resumes/{resume['id']}").status_code == 404
+    assert client.get("/api/resumes", headers=headers).json()[0]["id"] == resume["id"]
+    assert client.post(f"/api/resumes/{resume['id']}/activate", headers=headers).json() == {"active": True}
+    assert client.get("/api/resumes/active", headers=headers).json()["id"] == resume["id"]
+    assert client.get(f"/api/resumes/{resume['id']}", headers=headers).status_code == 200
+    assert client.delete(f"/api/resumes/{resume['id']}", headers=headers).json() == {"deleted": True}
+    assert client.get(f"/api/resumes/{resume['id']}", headers=headers).status_code == 404
 
 
-def test_rejects_bad_pdf(client: TestClient) -> None:
+def test_rejects_bad_pdf(client: TestClient, token: str) -> None:
     response = client.post(
         "/api/resumes",
+        headers={"X-Copilot-Token": token},
         files={"file": ("evil.pdf", b"MZ" + b"\x00" * 20, "application/pdf")},
     )
     assert response.status_code == 400

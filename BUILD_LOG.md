@@ -1716,7 +1716,8 @@ Python **470 passed / 3 skipped**；ruff 通过。
 
 - SQLite v3：`resumes`、`resume_projects`（FK CASCADE、索引）。
 - `ResumeStore`：创建/读取/列表/更新项目/删除/active 切换。
-- FastAPI：上传、列表、详情、删除、激活、项目 PATCH。
+- FastAPI：上传、列表、详情、删除、激活、项目 PATCH；全部要求 `X-Copilot-Token`。
+Electron IPC 只暴露简历专用方法，Token 只留在主进程。
 - 原文件保存在 `data_dir/resumes/`，不入 Git。
 
 ### 测试
@@ -1727,7 +1728,7 @@ Python **479 passed / 3 skipped**；ruff 通过。
 
 ### 未完成
 
-- 桌面端上传/项目编辑 UI 未做（计划 RI-6）。
+- 桌面端已加最小简历管理区：上传、列表、项目技术栈/GitHub 编辑、设为当前、删除。
 - 未做 LLM 结构化抽取与 Pydantic 二次校验。
 - 未做真实个人简历本地验证（只用合成 fixture）。
 

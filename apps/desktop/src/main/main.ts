@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
+import type { ResumeProjectPatch, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
 
@@ -86,6 +87,45 @@ function registerRendererProtocol(): void {
   })
 }
 
+async function coreApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!runtime) {
+    throw new Error('runtime.json not found')
+  }
+  const headers = new Headers(init.headers)
+  headers.set('X-Copilot-Token', runtime.token)
+  const response = await fetch(`http://127.0.0.1:${runtime.port}${path}`, { ...init, headers })
+  if (!response.ok) {
+    throw new Error(`Core API ${path} returned ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
+async function listResumes(): Promise<ResumeRecord[]> {
+  return coreApi<ResumeRecord[]>('/api/resumes')
+}
+
+async function uploadResume(fileName: string, data: ArrayBuffer): Promise<ResumeRecord> {
+  const form = new FormData()
+  form.set('file', new Blob([data]), fileName)
+  return coreApi<ResumeRecord>('/api/resumes', { method: 'POST', body: form })
+}
+
+async function activateResume(id: string): Promise<void> {
+  await coreApi(`/api/resumes/${encodeURIComponent(id)}/activate`, { method: 'POST' })
+}
+
+async function deleteResume(id: string): Promise<void> {
+  await coreApi(`/api/resumes/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+async function updateResumeProject(id: string, patch: ResumeProjectPatch): Promise<ResumeProjectRecord> {
+  return coreApi<ResumeProjectRecord>(`/api/resume-projects/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 760,
@@ -107,6 +147,11 @@ function createWindow(): BrowserWindow {
 function registerIpc(): void {
   ipcMain.handle('copilot:snapshot', () => snapshot())
   ipcMain.handle('copilot:audio', () => readAudioStatus())
+  ipcMain.handle('copilot:resumes', () => listResumes())
+  ipcMain.handle('copilot:resume-upload', (_event, fileName: string, data: ArrayBuffer) => uploadResume(fileName, data))
+  ipcMain.handle('copilot:resume-activate', (_event, id: string) => activateResume(id))
+  ipcMain.handle('copilot:resume-delete', (_event, id: string) => deleteResume(id))
+  ipcMain.handle('copilot:resume-project-update', (_event, id: string, patch: ResumeProjectPatch) => updateResumeProject(id, patch))
   ipcMain.handle('copilot:reconnect', async () => {
     runtime = readRuntimeFile()
     connection.setRuntime(runtime)

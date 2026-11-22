@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import sqlite3
 import time
@@ -15,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, WebSocket
 from fastapi.responses import JSONResponse
 
 from copilot_protocol import PROTOCOL_VERSION, event_to_wire, make_asr_status
@@ -270,19 +271,23 @@ def create_app(
             logger.exception("healthz failed")
             return JSONResponse({"status": "error", "error": "internal_error"}, status_code=500)
 
+    async def require_resume_token(x_copilot_token: str = Header(default="")) -> None:
+        if not hmac.compare_digest(x_copilot_token, token):
+            raise HTTPException(status_code=401, detail="unauthorized")
+
     @app.get("/api/resumes")
-    def list_resumes() -> list[dict[str, Any]]:
+    def list_resumes(_: None = Depends(require_resume_token)) -> list[dict[str, Any]]:
         return [item.model_dump(mode="json") for item in ResumeStore(app.state.db).list()]
 
     @app.get("/api/resumes/active")
-    def active_resume() -> dict[str, Any]:
+    def active_resume(_: None = Depends(require_resume_token)) -> dict[str, Any]:
         resume = ResumeStore(app.state.db).active()
         if resume is None:
             raise HTTPException(status_code=404, detail="no active resume")
         return resume.model_dump(mode="json")
 
     @app.post("/api/resumes")
-    async def upload_resume(file: UploadFile) -> dict[str, Any]:
+    async def upload_resume(file: UploadFile, _: None = Depends(require_resume_token)) -> dict[str, Any]:
         raw = await file.read(5 * 1024 * 1024 + 1)
         if len(raw) > 5 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="file_too_large")
@@ -299,26 +304,26 @@ def create_app(
         return resume.model_dump(mode="json")
 
     @app.get("/api/resumes/{resume_id}")
-    def get_resume(resume_id: str) -> dict[str, Any]:
+    def get_resume(resume_id: str, _: None = Depends(require_resume_token)) -> dict[str, Any]:
         resume = ResumeStore(app.state.db).get(resume_id)
         if resume is None:
             raise HTTPException(status_code=404, detail="resume_not_found")
         return resume.model_dump(mode="json")
 
     @app.delete("/api/resumes/{resume_id}")
-    def delete_resume(resume_id: str) -> dict[str, bool]:
+    def delete_resume(resume_id: str, _: None = Depends(require_resume_token)) -> dict[str, bool]:
         if not ResumeStore(app.state.db).delete(resume_id):
             raise HTTPException(status_code=404, detail="resume_not_found")
         return {"deleted": True}
 
     @app.post("/api/resumes/{resume_id}/activate")
-    def activate_resume(resume_id: str) -> dict[str, bool]:
+    def activate_resume(resume_id: str, _: None = Depends(require_resume_token)) -> dict[str, bool]:
         if not ResumeStore(app.state.db).set_active(resume_id):
             raise HTTPException(status_code=404, detail="resume_not_found")
         return {"active": True}
 
     @app.patch("/api/resume-projects/{project_id}")
-    def update_resume_project(project_id: str, update: ResumeProjectUpdate) -> dict[str, Any]:
+    def update_resume_project(project_id: str, update: ResumeProjectUpdate, _: None = Depends(require_resume_token)) -> dict[str, Any]:
         project = ResumeStore(app.state.db).update_project(project_id, update)
         if project is None:
             raise HTTPException(status_code=404, detail="project_not_found")

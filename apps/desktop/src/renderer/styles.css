@@ -170,3 +170,19 @@ dd {
   font-size: 12px;
   line-height: 1.6;
 }
+
+
+.resumes { margin-top: 24px; border-top: 1px solid var(--border, #2a2d35); padding-top: 16px; }
+.resume-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.upload { cursor: pointer; border: 1px dashed #4b5563; padding: 6px 10px; border-radius: 6px; }
+.upload input { display: none; }
+.resume-card { border: 1px solid var(--border, #2a2d35); border-radius: 8px; padding: 12px; margin-top: 12px; }
+.resume-card header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.resume-actions { margin-left: auto; display: flex; gap: 6px; }
+.project { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #333842; }
+.project-name { font-weight: 600; margin: 0 0 4px; }
+.project label { display: block; margin: 6px 0; font-size: 13px; }
+.project input { width: 100%; box-sizing: border-box; margin-top: 3px; background: #15171c; color: inherit; border: 1px solid #333842; border-radius: 4px; padding: 6px; }
+.muted { color: #9ca3af; font-size: 12px; }
+.empty, .resume-error { color: #f59e0b; font-size: 13px; }
+button.danger { border-color: #7f1d1d; color: #fca5a5; }
