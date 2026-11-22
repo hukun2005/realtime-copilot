@@ -1,0 +1,16 @@
+{
+  "samples": 130,
+  "tp": 85,
+  "fp": 0,
+  "fn": 0,
+  "tn": 45,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "typeAccuracy": 1.0,
+  "followUpAccuracy": 1.0,
+  "statementFalsePositiveRate": 0.0,
+  "falsePositives": [],
+  "falseNegatives": [],
+  "typeErrors": []
+}

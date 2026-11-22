@@ -20,16 +20,20 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | WASAPI loopback / mic 采集、二进制帧 v1 | 已实现 |
 | 设备恢复、稳定性报告 | 已实现；真实热插拔 **NOT_VERIFIED** |
 | VAD（Energy VAD + 完整 PCM 片段） | 已实现；真实噪声评测 **NOT_VERIFIED** |
-| 阿里云 Paraformer 实时 ASR | 已接入；真实 API **PASS**；**连接复用已实现**（TTS 测试音频，非会议） |
+| 阿里云 Paraformer 实时 ASR | 已接入；真实 API **PASS**（TTS 测试音频，非会议） |
+| WebSocket 连接复用 | **已实现**（P3.3；单连接顺序 run-task/finish-task） |
+| Segment 顺序识别 / Partial / Final | **已实现**（每来源串行；partial 仅 UI 临时文本） |
+| 持续实时流式 ASR（逐帧不切段） | **尚未实现**（后续项，不等同于连接复用） |
+| 真人会议识别质量 | **NOT_MEASURED**（仅有 TTS 评测） |
 | Deepgram Provider（Segment 级） | 代码已实现；真实连接 **NOT_VERIFIED**（无 API Key） |
 | ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
-| 持续实时流式 ASR | **尚未实现**（P3.3） |
+| 问题检测引擎（P4） | **已实现**：规则检测/分类/追问/状态机；人工标注集评测通过，非真实会议 |
 | 30 分钟 ASR 联合测试 | **PASS**（真实 WASAPI + 连接复用；TTS 音频，非会议） |
 | 60 分钟 ASR 联合测试 | **PASS**（双来源 + 连接复用；TTS 音频，非真人双讲） |
 | 进程级 loopback（按进程采集） | 能力探测已实现；目标应用 **NOT_VERIFIED** |
 | 真实会议 WER | **NOT_MEASURED** |
 | 腾讯会议 / 微信 PC 兼容 | **NOT_VERIFIED** |
-| 问题检测、DeepSeek 问答、悬浮窗 | 尚未实现 |
+| DeepSeek 问答、悬浮窗 | 尚未实现 |
 
 性能目标（P50 < 1s / P95 < 2s）在后续阶段测量，**当前没有任何延迟数据**，详见 [TEST_PLAN.md](TEST_PLAN.md)。
 
@@ -109,7 +113,7 @@ Core 的配置来自 `%LOCALAPPDATA%\RealTimeCopilot\config.toml`，可用 `RTC_
 
 | 范围 | 命令 | 当前结果 |
 |---|---|---|
-| Python（协议 + Core + 音频 + 控制面 + ASR 运行时） | `uv run pytest -q` | 349 passed, 3 skipped |
+| Python（协议 + Core + 音频 + 控制面 + ASR + 问题检测） | `uv run pytest -q` | 372 passed, 3 skipped |
 | Python 静态检查 | `uv run ruff check .` | All checks passed |
 | C# | `dotnet test services/audio-capture/tests -c Release` | 91 passed |
 | 协议（TypeScript） | `pnpm -C packages/protocol test` | 26 passed |

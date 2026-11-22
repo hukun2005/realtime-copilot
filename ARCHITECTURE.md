@@ -91,7 +91,7 @@ audio frame (20ms, 16k mono PCM16, source=loopback|mic)
   → AsrProvider.stream(segment)  ── partial* ──► transcript.partial   (仅 UI 显示)
                                   └─ final  ──► transcript.segment    (进入装配)
   → TranscriptAssembler：滚动窗口、按来源分轨、标点归一、去重
-  → QuestionDetector：启发式打分 → (可选) 小模型复核
+  → QuestionDetector（规则）→ question.detected → 候选问题/类型/追问/状态机
   → question.detected { text, confidence, source, anchorTs }
   → AnswerEngine：
         上下文 = 系统提示 + 最近 N 条转写 + KB 命中 + 用户画像

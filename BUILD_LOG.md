@@ -1140,7 +1140,74 @@ Python **338 passed / 3 skipped**；ruff 通过。
 说明：首次 60 分钟运行因机器休眠只采集到约 12 分钟，报告已作废；修复为 `SetThreadExecutionState` 防休眠 +
 墙钟/帧率校验后重跑，上表为有效结果。TTS 音频，非真实会议；无 WER。
 
+## 2026-11-22 · P4：智能问题检测引擎
+
+基线任务书为 `d925b53`（实际 main），P3.4/P3.5 分支未合并；P4 从 main 独立开发，
+避免把未审核的 P3.4/P3.5 带入本 PR。
+
+### P4.1 转写管理
+
+`copilot_core/detection/transcript.py`：partial 更新、final 定稿、重复 final 去重、
+generation 隔离、loopback/mic 独立、最近 N 条、条目上限、文本 4000 字上限。
+Partial 不触发检测。
+
+### P4.2 规则检测
+
+`classifier.py`：问题标记/疑问词/祈使句 + 技术/项目/行为/场景词表；
+输出 is_question、类型、confidence、原始/规范化文本、reason、source、segmentId。
+confidence 是规则分数，不是校准概率；不接在线 LLM。
+
+### P4.3 追问
+
+`followup.py`：每来源保存主问题；显式追问（那/然后/具体/刚才/它和/这个）关联
+最近主问题并给出 parentQuestionId + reason；新主问题替换上下文；超时/无上下文不强行关联。
+
+### P4.4 状态机
+
+`state.py`：COLLECTING/CANDIDATE/CONFIRMED/ANSWERING/ANSWERED 及
+IGNORED/CANCELLED/SUPERSEDED/FAILED，非法迁移抛 `InvalidTransition`；
+相同规范化文本去重；新主问题令旧候选 SUPERSEDED；支持 cancel_all。
+ANSWERING/ANSWERED 只定义状态，不接 LLM。
+
+### P4.5 手动入口
+
+`scripts/detect_question.py`：`--text` 或 stdin，逐条走 `QuestionEngine.ingest_final`
+（与真实 asr.final 同一入口）。
+
+### P4.6 评测
+
+`tests/fixtures/detect/labeled.jsonl`：130 条（30 技术 / 20 项目 / 15 行为 /
+20 追问 / 45 陈述+闲聊）。
+`scripts/detect_eval.py` 结果：**Precision 1.00 / Recall 1.00 / F1 1.00**，
+类型准确率 1.00，追问关联 1.00，陈述误报 0%。
+这是人工编写规则友好集，**不代表真实会议表现**；样本由同一实现作者编写，
+指标偏高，不能外推。
+
+### P4.7 稳定性
+
+空文本、超长文本、非法来源、重复 final、旧 generation、200 条高频输入、
+detector 异常隔离（`last_error`，不向 ASR 抛）、cancel_all 均有测试。
+检测失败不影响 WASAPI/VAD/ASR：app 的 `asr_events` 捕获异常后继续广播。
+
+### P4.8 集成
+
+`app.py`：ASR coordinator 的广播改为 `asr_events`，仅 `asr.final` 进入检测；
+`/healthz.detection` 暴露计数（不含文本）。未新增协议事件，未改 Schema/C#。
+
+### 测试
+
+Python **372 passed / 3 skipped**；ruff 通过；C#/协议/桌面未改。
+
+### 未解决
+
+- 规则表规模小，未做真实会议数据评测。
+- 追问只支持显式表达；代词消解/跨主题指代仍可能误关联。
+- confidence 未校准，不能作为概率。
+- 未接 LLM 复核、未生成 answer 事件、未接 UI。
+- 真实会议/真人对话准确率 **NOT_MEASURED**。
+
 ### 变更记录
+
 
 
 

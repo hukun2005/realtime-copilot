@@ -366,3 +366,17 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 失败 | 失败废弃连接；无结果时重试一次；有 partial 不重放 |
 | 生命周期 | 空闲重建；cancel/close 幂等；active sockets 归零 |
 | 稳定性 | 30 分钟单来源、60 分钟双来源 PASS（TTS） |
+
+
+### P4 问题检测
+
+| 类别 | 断言 |
+|---|---|
+| P4.1 | partial/final、重复 final、generation、双来源、超长、缓存上限 |
+| P4.2 | 技术/项目/行为/场景/普通陈述分类；confidence/reason |
+| P4.3 | 追问关联 parentQuestionId；无上下文不关联 |
+| P4.4 | 合法/非法状态迁移、去重、SUPERSEDED、cancel_all |
+| P4.5 | 手动文本走同一 ingest_final |
+| P4.6 | 130 条人工标注：P/R/F1、类型、追问、陈述误报 |
+| P4.7 | 空/超长/非法来源/异常隔离/高频 |
+| P4.8 | `/healthz.detection`；ASR final 进入检测 |
