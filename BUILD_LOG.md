@@ -1216,7 +1216,45 @@ Python **373 passed / 3 skipped**；ruff 通过。
 
 Python **382 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-04：transcript 协议与事件整合
+
+基线 `6d47460`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 协议
+
+新增两个事件（向后兼容，不改 `asr.*` 与音频 v1）：
+
+- `transcript.segment`：`sessionId/segmentId/source/startTsNs/endTsNs/text/revision/generation/provider`
+- `transcript.reset`：`sessionId/generation/reason(capture_stopped|generation_changed|error|shutdown)`
+
+同步更新：
+
+- `schema/events.v1.json`（`$defs` + `oneOf`）
+- 生成 `src/generated/types.ts`、`python/copilot_protocol/models.py`
+- `EVENT_TYPES`（TS/Python）
+- fixtures：`transcript.segment.json`、`transcript.reset.json`
+
+### Handler
+
+新增 `transcript/handler.py`：
+
+- `handle(asr.final)` → `TranscriptAssembler` → `TranscriptBuffer` → `TranscriptStore` → 广播 `transcript.segment`。
+- 只处理 final；partial/status/error 忽略。
+- 重复 Segment 只落库/广播一次。
+- `flush()` 产出装配器剩余 Segment。
+- `stop(reason)`：flush、结束会话、广播 `transcript.reset`、清空缓冲。
+- 持久化或广播失败只计数并记录通用日志，不向上抛异常，避免中断 ASR/采集。
+- 运行时会话接入（capture start/stop、generation）留到 P34-05。
+
+### 测试
+
+- 协议：TS 28 passed；Python 39 passed（fixtures 覆盖全部 `EVENT_TYPES`）。
+- Handler 新增 9 个：落库+广播、重复、非 final 忽略、stop flush/reset、畸形 payload、
+  广播失败仍落库、重复 start、inactive、两条 final 顺序。
+- 全量 Python **395 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

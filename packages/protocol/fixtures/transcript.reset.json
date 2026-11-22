@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "type": "transcript.reset",
+  "eventId": "evt_transcript_reset_0001",
+  "ts": 1763700001000,
+  "payload": {
+    "sessionId": "sess_20261122abcd",
+    "generation": 1,
+    "reason": "capture_stopped"
+  }
+}

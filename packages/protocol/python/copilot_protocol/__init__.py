@@ -42,6 +42,10 @@ from .models import (
     SystemErrorPayload,
     SystemReadyEvent,
     SystemReadyPayload,
+    TranscriptResetEvent,
+    TranscriptResetPayload,
+    TranscriptSegmentEvent,
+    TranscriptSegmentPayload,
 )
 
 __all__ = [
@@ -69,6 +73,10 @@ __all__ = [
     "SystemErrorPayload",
     "SystemReadyEvent",
     "SystemReadyPayload",
+    "TranscriptResetEvent",
+    "TranscriptResetPayload",
+    "TranscriptSegmentEvent",
+    "TranscriptSegmentPayload",
     "dumps",
     "event_to_wire",
     "make_asr_error",

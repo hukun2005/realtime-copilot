@@ -366,3 +366,12 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 失败 | 失败废弃连接；无结果时重试一次；有 partial 不重放 |
 | 生命周期 | 空闲重建；cancel/close 幂等；active sockets 归零 |
 | 稳定性 | 30 分钟单来源、60 分钟双来源 PASS（TTS） |
+
+
+### P34-04 transcript 协议
+
+| 类别 | 断言 |
+|---|---|
+| Schema | `transcript.segment/reset` 通过 JSON Schema；fixtures 覆盖全部 EVENT_TYPES |
+| Handler | 仅处理 asr.final；重复只一次；stop flush + reset；广播失败仍落库 |
+| 运行时 | capture 生命周期接入在 P34-05 验证 |

@@ -455,6 +455,69 @@ class AudioSourceStats(BaseModel):
     error_code: Annotated[ErrorCode | None, Field(alias='errorCode')] = None
 
 
+class SessionId(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(
+            description='一次采集会话的稳定标识。',
+            pattern='^sess_[A-Za-z0-9_-]{8,64}$',
+            title='SessionId',
+        ),
+    ]
+
+
+class TranscriptSegmentPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    segment_id: Annotated[AsrSegmentId, Field(alias='segmentId')]
+    source: AsrSource
+    start_ts_ns: Annotated[int, Field(alias='startTsNs', ge=0)]
+    end_ts_ns: Annotated[int, Field(alias='endTsNs', ge=0)]
+    text: Annotated[str, Field(max_length=8000)]
+    revision: Annotated[int, Field(ge=0)]
+    generation: Annotated[int, Field(ge=0)]
+    provider: Annotated[str | None, Field(max_length=64)] = None
+
+
+class TranscriptResetPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    generation: Annotated[int, Field(ge=0)]
+    reason: Literal['capture_stopped', 'generation_changed', 'error', 'shutdown']
+
+
+class TranscriptSegmentEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['transcript.segment']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: TranscriptSegmentPayload
+
+
+class TranscriptResetEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['transcript.reset']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId | None, Field(alias='requestId')] = None
+    ts: Annotated[int, Field(ge=0)]
+    payload: TranscriptResetPayload
+
+
 class Sources(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -506,6 +569,8 @@ class EventV1(
         | AsrPartialEvent
         | AsrFinalEvent
         | AsrErrorEvent
+        | TranscriptSegmentEvent
+        | TranscriptResetEvent
     ]
 ):
     root: Annotated[
@@ -520,7 +585,9 @@ class EventV1(
         | AsrStatusEvent
         | AsrPartialEvent
         | AsrFinalEvent
-        | AsrErrorEvent,
+        | AsrErrorEvent
+        | TranscriptSegmentEvent
+        | TranscriptResetEvent,
         Field(
             description='RealTime Copilot 有线协议 v1。JSON Schema 是唯一事实来源；TypeScript 类型与 Python Pydantic 模型由 scripts/generate.mjs 生成，C# DTO 手写并由 fixtures 往返测试约束。所有事件共用同一 envelope：v/type/eventId/requestId/ts/payload。',
             title='EventV1',
