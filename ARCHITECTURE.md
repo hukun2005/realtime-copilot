@@ -90,7 +90,7 @@ audio frame (20ms, 16k mono PCM16, source=loopback|mic)
   → 语音段切分：START / CONTINUE / END（END 附带最后有效帧时间戳）
   → AsrProvider.stream(segment)  ── partial* ──► transcript.partial   (仅 UI 显示)
                                   └─ final  ──► transcript.segment    (进入装配)
-  → TranscriptAssembler：滚动窗口、按来源分轨、标点归一、去重
+  → TranscriptAssembler：滚动窗口、按来源分轨、标点归一、去重（P3.4 已实现）
   → QuestionDetector：启发式打分 → (可选) 小模型复核
   → question.detected { text, confidence, source, anchorTs }
   → AnswerEngine：

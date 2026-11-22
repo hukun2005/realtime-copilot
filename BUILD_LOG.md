@@ -1308,7 +1308,46 @@ shutdown 结束活动会话、无会话时 asr.final 忽略。
 
 全量 Python **402 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-07：P3.4 集成验收
+
+基线 `890790d`（含 soak transcript 校验）；实际运行 SHA `8fc7644`，`gitDirty=false`。
+
+### 真实链路
+
+`capture.start → WASAPI loopback → VAD → Paraformer → asr.final → TranscriptAssembler
+→ TranscriptBuffer → SQLite → transcript.segment → transcript.reset → capture.stop`
+
+执行：`scripts/asr-soak-wasapi.ps1 -Minutes 2 -Interval 20 -KeepData`（TTS 音频）。
+
+| 项 | 结果 |
+|---|---|
+| Core / Windows | 0.1.0 / 10.0.26300 |
+| 模型 | paraformer-realtime-v2 |
+| 墙钟 | 122.6s（ratio 1.021） |
+| 帧数 | 5,008（短测启动波动，ratio 0.927） |
+| ASR Segment / Final | 29 / 29（0 错误） |
+| 转写落库 | **34** 条（停止时 ASR flush 额外 5 条） |
+| 会话 | 1 个，`status=completed`，`ended_at` 已写 |
+| transcript 指标 | 停止前 assembled 26 / persisted 26 / 0 错误 |
+| 连接 | 2 次尝试（验证 + 复用），0 失败 |
+| 进程内存 | WS 66.2 MB / Private 45.9 MB |
+
+Core 停止后重新打开同一 SQLite：会话仍为 `completed`，34 条 Segment 可查询，
+说明不是仅内存状态。
+
+### 修复
+
+- Assembler 默认 `merge_gap_ms=0`，且**时间重叠不合并**：此前重叠/相邻段被吞成
+  一条 664 字的长文本；现在保留 VAD 句边界。
+- soak 采样 `transcript`，并在停止后只读查询 `transcript_segments` 校验：
+  `segments>0` 且最新会话 `completed` 才 PASS；短测帧率阈值 0.85（长测仍 1.0）。
+
+### 验证
+
+Python **402 passed / 3 skipped**；ruff；C# 91；协议 28；桌面 11；typecheck 通过。
+
 ### 变更记录
+
 
 
 

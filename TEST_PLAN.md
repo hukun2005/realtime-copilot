@@ -395,3 +395,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | snapshot | assembled/persisted/持久化错误/广播错误、装配与缓冲计数 |
 | 隐私 | snapshot 不含转写正文 |
 | healthz | `/healthz.transcript` 反映 active/generation/persisted |
+
+
+### P34-07 集成验收
+
+| 类别 | 断言 |
+|---|---|
+| 真实链路 | WASAPI → Paraformer → asr.final → transcript.segment → SQLite |
+| 会话 | capture.start 建会话，capture.stop 后 status=completed |
+| 持久化 | Core 停止后重新打开 DB 仍可查询会话与 Segment |
+| 失败策略 | 转写/广播失败不阻断 ASR；短测帧率阈值 0.85，长测 1.0 |
