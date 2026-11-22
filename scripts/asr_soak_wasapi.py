@@ -67,6 +67,28 @@ def _transcript_db(data_dir: str) -> dict[str, Any]:
         connection.close()
 
 
+def _wait_transcript_completed(data_dir: str, *, timeout: float = 20.0) -> bool:
+    """capture.stop 后等待转写会话落完并标记 completed。"""
+    path = Path(data_dir) / "copilot.db"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            connection.row_factory = sqlite3.Row
+            try:
+                row = connection.execute(
+                    "SELECT status FROM meeting_sessions ORDER BY started_at DESC LIMIT 1"
+                ).fetchone()
+            finally:
+                connection.close()
+            if row is not None and row["status"] == "completed":
+                return True
+        except sqlite3.Error:
+            pass
+        time.sleep(0.25)
+    return False
+
+
 def _healthz(port: int) -> dict[str, Any] | None:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5) as resp:
@@ -158,6 +180,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         stop_id = "req_" + uuid.uuid4().hex
         await ws.send(_envelope("capture.stop", {}, stop_id))
         await asyncio.sleep(2)
+        await asyncio.to_thread(_wait_transcript_completed, str(runtime.get("dataDir") or ""))
         hb.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await hb
