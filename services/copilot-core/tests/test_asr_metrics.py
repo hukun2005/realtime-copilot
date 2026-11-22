@@ -189,7 +189,12 @@ def aliyun_provider(
         assert socket is not None
         return socket
 
-    values: dict[str, Any] = {"name": "aliyun", "workspace_id": "ws-test", "api_key_env": "ASR_TEST_KEY"}
+    values: dict[str, Any] = {
+        "name": "aliyun",
+        "workspace_id": "ws-test",
+        "api_key_env": "ASR_TEST_KEY",
+        "reuse_connections": False,
+    }
     if receive_timeout is not None:
         values["receive_timeout_seconds"] = receive_timeout
     config = AsrProviderConfig(**values)

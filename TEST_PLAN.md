@@ -355,3 +355,14 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | bySource | loopback/mic 的 partial/final 分别计数 |
 | Provider 指标 | 失败连接不计成功；验证/取消/超时后 active sockets 归零；重连只计重试 |
 | 延迟口径 | 只统计 Segment 内 first partial/final，不是端到端回答延迟 |
+
+
+### P3.3 连接复用
+
+| 类别 | 断言 |
+|---|---|
+| 复用 | 100 Segment 单连接；task_id 唯一；finish 前不开下一任务 |
+| 隔离 | loopback/mic 各自连接；同来源串行 |
+| 失败 | 失败废弃连接；无结果时重试一次；有 partial 不重放 |
+| 生命周期 | 空闲重建；cancel/close 幂等；active sockets 归零 |
+| 稳定性 | 30 分钟单来源、60 分钟双来源 PASS（TTS） |

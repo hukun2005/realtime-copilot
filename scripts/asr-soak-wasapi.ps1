@@ -15,6 +15,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class SoakPower {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern uint SetThreadExecutionState(uint flags);
+}
+"@
+# ES_CONTINUOUS | ES_SYSTEM_REQUIRED：防止系统休眠中断长跑
+[void][SoakPower]::SetThreadExecutionState([uint32]2147483649)
 $root = Split-Path -Parent $PSScriptRoot
 $dataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("rtc-soak-" + [guid]::NewGuid().ToString("N"))
 $core = $null
@@ -92,6 +102,7 @@ try {
     exit $code
 }
 finally {
+    [void][SoakPower]::SetThreadExecutionState([uint32]2147483648)
     if ($playback -and -not $playback.HasExited) { Stop-Process -Id $playback.Id -Force -ErrorAction SilentlyContinue }
     if ($core -and -not $core.HasExited) { Stop-Process -Id $core.Id -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 300

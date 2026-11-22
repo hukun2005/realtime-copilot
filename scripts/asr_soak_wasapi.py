@@ -72,6 +72,7 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
 
     samples: list[dict[str, Any]] = []
     started = time.monotonic()
+    started_wall = time.time()
     async with websockets.connect(ws_url, max_size=None) as ws:
         await ws.send(_envelope("hello", {"token": token, "role": "ui", "clientVersion": "soak"}))
         await wait_for(ws, lambda m: m.get("type") == "system.ready", deadline_seconds=15)
@@ -142,9 +143,14 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
     metrics = asr_last.get("metrics") or {}
     process = (samples[-1]["process"] if samples else None) or {}
     sha, dirty = _git()
+    wall_seconds = time.time() - started_wall
+    expected_frames = int(minutes * 60 * 50 * 0.9)
+    frame_ratio = round((frames[-1] if frames else 0) / max(1, expected_frames), 3)
+    wall_ratio = round(wall_seconds / max(1.0, minutes * 60), 3)
+    valid = frame_ratio >= 1.0 and wall_ratio >= 0.95
 
     return {
-        "result": "PASS" if frames and frames[-1] > 0 and asr_last.get("finals", 0) > 0 else "FAIL",
+        "result": "PASS" if valid and asr_last.get("finals", 0) > 0 else "FAIL",
         "mode": "real-wasapi" + ("-loopback+mic" if mic else "-loopback") + " + aliyun-paraformer",
         "minutes": minutes,
         "gitSha": sha,
@@ -153,6 +159,10 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         "model": "paraformer-realtime-v2",
         "framesReceived": frames[-1] if frames else 0,
         "framesDelta": (frames[-1] - frames[0]) if len(frames) >= 2 else 0,
+        "wallSeconds": round(wall_seconds, 1),
+        "wallRatio": wall_ratio,
+        "expectedFrames": expected_frames,
+        "frameRatio": frame_ratio,
         "firstFrameAt": first,
         "lastFrameAt": last,
         "segmentsEmitted": vad_last.get("segmentsEmitted"),

@@ -67,6 +67,8 @@ class AsrProviderConfig:
     max_retries: int = 2
     backoff_base_seconds: float = 0.2
     workspace_id: str | None = None
+    reuse_connections: bool = True
+    idle_timeout_seconds: float = 50.0
 
 
 class AsrProvider(Protocol):
