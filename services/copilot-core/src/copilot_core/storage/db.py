@@ -62,6 +62,43 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         ON transcript_segments(session_id, source, start_ts_ns)
         """,
     ),
+    3: (
+        """
+        CREATE TABLE IF NOT EXISTS resumes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_hash TEXT NOT NULL,
+            raw_text TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'parsed',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS resume_projects (
+            id TEXT PRIMARY KEY,
+            resume_id TEXT NOT NULL REFERENCES resumes(id) ON DELETE CASCADE,
+            project_name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT '',
+            tech_stack TEXT NOT NULL DEFAULT '[]',
+            start_date TEXT,
+            end_date TEXT,
+            achievements TEXT NOT NULL DEFAULT '[]',
+            github_urls TEXT NOT NULL DEFAULT '[]',
+            confidence REAL NOT NULL DEFAULT 0.5,
+            source_location TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_resume_projects_resume
+        ON resume_projects(resume_id)
+        """,
+    ),
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)

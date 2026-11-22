@@ -475,3 +475,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 取消 | 主动取消、新任务抢占、旧 generation 不回调、close 幂等 |
 | Context | 项目证据与通用知识分离；无证据提示不编造 |
 | 真实 | `deepseek-flash` 流式与取消；无 Key => NOT_RUN |
+
+
+### RI-1 简历
+
+| 类别 | 断言 |
+|---|---|
+| 安全 | PDF/DOCX 签名、大小、页数、ZIP 条目/解压、宏、文件名净化 |
+| 解析 | 中文项目名、多项目、技术栈、时间、GitHub、来源行号 |
+| 存储 | v3 迁移、项目更新、删除级联、active 切换 |
+| API | 上传/列表/详情/删除/激活；坏文件 400 |
