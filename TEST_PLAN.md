@@ -415,3 +415,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 音频 | 16k/16-bit/mono，时长与 manifest 一致 |
 | 覆盖 | clean/technical/numbers/mixed/filler/long/noisy/silence |
 | 隐私 | 仓库仅合成音频，真实会议在 evaluation/local/ 且不提交 |
+
+
+### P35-02 CER/WER
+
+| 类别 | 断言 |
+|---|---|
+| 归一化 | NFKC、小写、去标点；CER 去空白，WER 分 Latin 词/CJK 字 |
+| 对齐 | 替换/插入/删除计数、空假设、空参考 |
+| 汇总 | micro/macro、分类、静音幻觉单独统计 |
+| 报告 | JSON/Markdown 不含正文；oracle 仅自检 |

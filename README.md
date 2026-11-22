@@ -29,6 +29,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | 60 分钟 ASR 联合测试 | **PASS**（双来源 + 连接复用；TTS 音频，非真人双讲） |
 | 进程级 loopback（按进程采集） | 能力探测已实现；目标应用 **NOT_VERIFIED** |
 | ASR 评测数据集（合成 TTS） | **已建立**（P3.5；11 个样本，真实会议录音不入库） |
+| CER/WER 工具 | **已实现**（P3.5；含归一化、micro/macro、静音幻觉） |
 | 真实会议 WER | **NOT_MEASURED** |
 | 腾讯会议 / 微信 PC 兼容 | **NOT_VERIFIED** |
 | 问题检测、DeepSeek 问答、悬浮窗 | 尚未实现 |

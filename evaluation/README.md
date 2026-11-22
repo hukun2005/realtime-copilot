@@ -64,3 +64,23 @@ uv run python scripts/build_eval_manifest.py
 - 稳定性：TTS 30/60 分钟仅代表链路稳定性，不代表会议识别质量
 
 工具与报告在 P35-02 起实现。
+
+
+## CER/WER 工具
+
+```powershell
+# 工具自检（用参考文本当假设，不是 ASR 结果）
+uv run python scripts/evaluate_asr.py --oracle --label oracle-selfcheck
+
+# 评测真实 ASR 假设
+uv run python scripts/evaluate_asr.py `
+  --hypotheses evaluation/reports/hypotheses-paraformer.json `
+  --source paraformer --label paraformer-clean
+```
+
+输出：
+
+- `evaluation/reports/cer-wer-<label>.json`
+- `evaluation/reports/cer-wer-<label>.md`
+
+报告默认不写参考/假设正文；真实会议评估只保留样本 id、类别与指标。

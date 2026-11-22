@@ -1380,7 +1380,41 @@ Python **402 passed / 3 skipped**；ruff；C# 91；协议 28；桌面 11；typec
 
 全量 Python **408 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P35-02：CER/WER 工具
+
+基线 `8f3bd41`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/evaluation/metrics.py`：
+  - NFKC、小写、去标点/符号/控制字符；
+  - CER 以字符计，WER 以 Latin 词 + 单个 CJK 字计；
+  - Levenshtein 回填替换/插入/删除计数；
+  - 空参考单独统计幻觉，不进入 CER/WER 汇总；
+  - 汇总同时给 micro（总错误/总参考）与 macro（逐样本平均）及分类。
+- 新增 `scripts/evaluate_asr.py`：
+  - 读取 manifest 并校验 SHA-256；
+  - 假设来源为 JSON `{sampleId: text}` 或 `--oracle`（仅工具自检，不是 ASR）；
+  - 输出 JSON + Markdown，默认不含参考/假设正文，避免会议内容外泄；
+  - 缺失假设默认报错（`--allow-missing` 可放宽）。
+
+### 自检
+
+`uv run python scripts/evaluate_asr.py --oracle --label oracle-selfcheck`
+
+结果：11 样本（10 计分 + 1 静音），CER/WER = 0，无幻觉。
+报告：`evaluation/reports/cer-wer-oracle-selfcheck.{json,md}`。
+该报告是**工具自检**，不是 ASR 识别结果，不得当作 Provider 指标。
+
+### 测试
+
+新增 11 个：归一化、CER/WER 切分、替换/插入/删除、空假设、静音幻觉、
+micro/macro、静音排除、分类汇总。
+
+全量 Python **419 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
