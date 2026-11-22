@@ -1693,7 +1693,47 @@ Python **470 passed / 3 skipped**；ruff 通过。
 - 未接真实项目证据/知识库（RI 阶段）。
 - 未做多轮真实对话评测。
 
+## 2026-11-22 · RI-1：简历解析（后端）
+
+基线 `6eac84f`；分支 `feature/ri-1-resume-parser`。
+
+### 文件安全
+
+- 仅 PDF/DOCX；扩展名 + magic 校验；拒绝 MZ/ELF。
+- 最大 5 MiB、PDF 30 页、DOCX 1000 条目/30 MiB 解压、拒绝 VBA 宏。
+- 文件名净化（路径穿越、控制字符、长度）；文档不执行脚本。
+
+### 解析
+
+- PDF：pypdf 提取逐页文本（`[page N]`）。
+- DOCX：python-docx 提取段落/表格（`[para N]`）。
+- 规则提取：姓名、项目经历/项目经验/Projects 段落、项目标题、技术栈、时间、
+  GitHub URL、职责/成果；保留 raw_text 与 `line x-y` 来源。
+- 无项目段时用 GitHub URL 回退，confidence 降低。
+- 未做 LLM 结构化抽取；Prompt Injection 只作为文本保存，不执行。
+
+### 存储/API
+
+- SQLite v3：`resumes`、`resume_projects`（FK CASCADE、索引）。
+- `ResumeStore`：创建/读取/列表/更新项目/删除/active 切换。
+- FastAPI：上传、列表、详情、删除、激活、项目 PATCH；全部要求 `X-Copilot-Token`。
+Electron IPC 只暴露简历专用方法，Token 只留在主进程。
+- 原文件保存在 `data_dir/resumes/`，不入 Git。
+
+### 测试
+
+新增 9 个：DOCX 解析、空白 PDF、可执行/坏签名、超大、宏文档、文件名净化、
+Prompt Injection 文本、Store 往返/更新/删除、HTTP 上传/激活/删除/坏文件。
+Python **479 passed / 3 skipped**；ruff 通过。
+
+### 未完成
+
+- 桌面端已加最小简历管理区：上传、列表、项目技术栈/GitHub 编辑、设为当前、删除。
+- 未做 LLM 结构化抽取与 Pydantic 二次校验。
+- 未做真实个人简历本地验证（只用合成 fixture）。
+
 ### 变更记录
+
 
 
 

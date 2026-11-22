@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from copilot_core.storage import StorageError, close, connect, open_database
+from copilot_core.storage import SCHEMA_VERSION, StorageError, close, connect, open_database
 from copilot_core.transcript import TranscriptSegment, TranscriptStore
 
 MS = 1_000_000
@@ -72,7 +72,7 @@ def test_v1_database_upgrades_and_keeps_settings(tmp_path: Path) -> None:
     try:
         row = upgraded.execute("SELECT value FROM settings WHERE key='overlay'").fetchone()
         assert row is not None and row["value"] == "bottom"
-        assert upgraded.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert upgraded.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     finally:
         close(upgraded)
 
