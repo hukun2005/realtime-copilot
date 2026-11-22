@@ -17,12 +17,13 @@ from typing import Any
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import JSONResponse
 
-from copilot_protocol import PROTOCOL_VERSION, make_asr_status
+from copilot_protocol import PROTOCOL_VERSION, event_to_wire, make_asr_status
 
 from .asr import AsrCoordinator, AsrProviderConfig, AsrRegistry, AsrStatusTracker
 from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
+from .detection import QuestionEngine
 from .logging_setup import get_logger
 from .memory import process_memory
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
@@ -62,6 +63,21 @@ def create_app(
                 await connection.send_event(event)
             except Exception:
                 ui_connections.discard(connection)
+
+    async def asr_events(event: Any) -> None:
+        """广播 ASR 事件，并把 final 送入问题检测。"""
+        await broadcast(event)
+        if getattr(event, "type", None) != "asr.final":
+            return
+        try:
+            payload = event_to_wire(event)["payload"]
+            app.state.detection.ingest_final(
+                segment_id=payload["segmentId"],
+                source=payload["source"],
+                text=payload["text"],
+            )
+        except Exception:
+            logger.exception("question detection failed")
 
     tickets = TicketIssuer(ttl_seconds=config.capture.ticket_ttl_seconds)
     @asynccontextmanager
@@ -111,6 +127,7 @@ def create_app(
     app.state.roles = {}
     app.state.port = 0
     app.state.audio = AudioHub(config.audio)
+    app.state.detection = QuestionEngine()
     asr_coordinator: AsrCoordinator | None = None
     provider_name = os.environ.get("RTC_ASR_PROVIDER")
     if provider_name:
@@ -136,7 +153,7 @@ def create_app(
                 pipeline=app.state.audio.pipeline,
                 tickets=tickets,
                 provider_factory=lambda: AsrRegistry.create(provider_config),
-                broadcast=broadcast,
+                broadcast=asr_events,
                 logger=get_logger("copilot_core.asr"),
             )
         except Exception:
@@ -155,6 +172,7 @@ def create_app(
 
     app.state.asr = AsrStatusTracker()
     app.state.capture = controller
+    app.state.asr_events = asr_events
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
