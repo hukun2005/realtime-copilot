@@ -1,0 +1,130 @@
+{"text": "什么是Vue3 的响应式原理？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "它和 Vue2 有什么区别？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是闭包？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那为什么 Vue3 选择 Proxy？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是JavaScript 的事件循环？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那如果代理失效怎么办？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是原型链？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "具体怎么实现？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是虚拟 DOM？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "然后呢？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是HTTP 缓存？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "还有呢？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是数据库索引？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "你刚才说的响应式具体指什么？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是事务隔离级别？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "这个方案有什么缺点？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是死锁？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那性能怎么优化？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是幂等设计？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "怎么解决这个问题？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是分布式锁？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "它和闭包有什么关系？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是微服务拆分？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那为什么会出现内存泄漏？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是垃圾回收？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那如果并发很高呢？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是内存泄漏？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "具体展开说说。", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是跨域？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "这个和原型链有什么关系？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是鉴权？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那为什么需要事务？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是TypeScript 泛型？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "那如果缓存失效呢？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是React Hooks？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "还有别的方案吗？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是SQL 注入？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "你刚才提到的幂等怎么保证？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "什么是算法复杂度？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "怎么验证这个设计？", "expected_is_question": true, "expected_type": "follow_up", "expected_parent": true, "source": "handwritten"}
+{"text": "Vue3 和 Vue2 有什么区别？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "解释一下 JavaScript 的事件循环。", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "说说原型链是什么。", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "HTTP 和 HTTPS 有什么区别？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "为什么数据库索引能加速查询？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "请解释一下事务的 ACID。", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "什么是跨域，怎么解决？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "谈谈你对 TypeScript 泛型的理解。", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "React Hooks 有什么使用限制？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "如何避免 SQL 注入？", "expected_is_question": true, "expected_type": "technical", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做权限管理？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "介绍一下你负责的模块。", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目里最大的难点是什么？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何做技术选型？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "实习期间你完成了什么？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你项目的架构是怎样的？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "需求变更时你怎么处理？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何保证上线质量？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目里你负责哪部分？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做性能优化？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你和团队怎么协作？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目的迭代节奏是怎样的？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何评估工作量？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目遇到的最大挑战是什么？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做接口设计？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目里用了哪些技术？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做错误处理？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做数据校验？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "项目上线后怎么监控？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你在项目中如何做代码评审？", "expected_is_question": true, "expected_type": "project", "expected_parent": false, "source": "handwritten"}
+{"text": "你遇到过最大的团队冲突是什么？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何面对工作压力？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "说说你的一次失败经历。", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你的优点和缺点是什么？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你的职业规划是什么？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你为什么离职？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何看待加班？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你和同事意见不一致怎么办？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何向领导汇报问题？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你最近一次复盘学到了什么？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何保持学习？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你遇到过最难沟通的人是谁？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何接受批评？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你如何激励团队？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "你做过最冒险的决定是什么？", "expected_is_question": true, "expected_type": "behavioral", "expected_parent": false, "source": "handwritten"}
+{"text": "我昨天完成了一个项目。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "今天讨论了接口设计。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "这个方案还需要再确认。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我们下午三点开会。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "文档已经发到群里。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "接口已经上线了。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我负责用户模块。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "团队这周在联调。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "需求已经确认。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "测试环境部署完成。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "这个问题昨天解决了。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我看了相关代码。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "数据库加了一个索引。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "缓存命中率还不错。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "日志里没有异常。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "发布计划定在周五。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我整理了一份会议记录。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "接口响应时间大约两百毫秒。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "前端使用 Vue3。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "后端使用 Python。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "项目分为三个阶段。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我们复用了现有组件。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "这次迭代范围很小。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "用户反馈比较正面。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "监控告警已经配置。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "回滚方案也准备好了。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "代码评审发现两个问题。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我把配置抽出来了。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "这个字段需要兼容旧版本。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "下周开始做压测。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "今天天气不错。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我们休息一下。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我马上回来。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "会议室有点冷。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "先喝口水吧。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "网络好像有点卡。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "大家都能听到我的声音。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我这边没问题。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "好的，收到。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "稍等一下。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我们继续。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "这个投影不太清楚。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "午饭还没定。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "今天人挺多的。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
+{"text": "我分享一下屏幕。", "expected_is_question": false, "expected_type": "statement", "expected_parent": false, "source": "handwritten"}
