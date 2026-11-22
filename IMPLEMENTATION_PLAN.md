@@ -246,6 +246,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P3.1 运行时 | `AsrPipeline` 有界帧/片段队列接入 `AudioSession`；`asr.status` idle 广播；段缓存上限 |
 | P3.1.1 加固 | Peak/RMS 统一口径、双指标 VAD、Provider 抽象、PCM 预算与生命周期 |
 | P3.2.9 统计 | 错误计数只计一次；连接/延迟指标口径；文档状态与实测对齐 |
+| P3.3 连接复用 | 每来源 session/lock、顺序 run-task/finish-task、空闲重建、失败废弃与单次重试 |
 
 **未完成**
 
