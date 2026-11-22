@@ -7,7 +7,7 @@
 
 - 每个来源有一个待装配窗口（``reorder_window``）。窗口内按 ``start_ts_ns`` 排序；
   当窗口超出容量时先产出最早的一条，保证缓冲有界。
-- 相邻 Segment 重叠或间隙不超过 ``merge_gap_ms``（默认 0，仅重叠）时合并，
+- 相邻 Segment 的间隙不超过 ``merge_gap_ms``（默认 0）时合并；时间重叠不合并，
   避免 VAD 把一句话切断，同时不把连续句子吞成一条。
 - 间隙超过 ``gap_threshold_ms`` 时只计数（``gaps``），不插入占位文本。
 
@@ -183,8 +183,8 @@ class TranscriptAssembler:
 
     def _mergeable(self, previous: TranscriptSegment, current: TranscriptSegment) -> bool:
         if current.start_ts_ns < previous.end_ts_ns:
-            # 重叠：视为同一句话的重复/切断，合并文本。
-            return True
+            # 时间重叠通常来自不同 VAD 段；保留边界，避免把多句话吞成一条。
+            return False
         return current.start_ts_ns - previous.end_ts_ns <= self._merge_gap_ms * 1_000_000
 
     def _merge(self, previous: TranscriptSegment, current: TranscriptSegment) -> TranscriptSegment:

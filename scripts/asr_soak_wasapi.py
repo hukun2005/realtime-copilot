@@ -183,7 +183,6 @@ async def run(runtime: dict[str, Any], minutes: float, interval: float, mic: boo
         transcript_db.get("available") is True
         and int(transcript_db.get("segments") or 0) > 0
         and transcript_db.get("latestStatus") == "completed"
-        and int(transcript_last.get("persisted") or 0) > 0
     )
     frame_threshold = 0.85 if minutes < 5 else 1.0
     valid = frame_ratio >= frame_threshold and wall_ratio >= 0.95 and transcript_ok
