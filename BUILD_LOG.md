@@ -1185,7 +1185,39 @@ Python **361 passed / 3 skipped**；ruff 通过。
 
 Python **373 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-22 · P34-03：SQLite v2 与 TranscriptStore
+
+基线 `0a4c131`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 迁移
+
+新增 v2（不修改 v1）：
+
+- `meeting_sessions(id, generation, started_at, ended_at, mode, status)`
+- `transcript_segments(id, session_id FK, generation, segment_id, source, start_ts_ns,
+  end_ts_ns, text, revision, provider, created_at)`
+- `UNIQUE(session_id, segment_id)`
+- 索引 `(session_id, start_ts_ns)`、`(session_id, source, start_ts_ns)`
+- `ON DELETE CASCADE`：删除会话即删除其转写
+
+不存原始音频、不存 API Key；升级保留 v1 `settings`。
+
+### Store
+
+- `TranscriptStore.start_session` 幂等；`end_session` 更新状态/结束时间。
+- `append` 用 `ON CONFLICT DO NOTHING` 幂等，返回是否插入；会话不存在抛 `StorageError`。
+- `segments(source=, limit=)` 按 `start_ts_ns` 排序；`sessions`、`segment_count`、`delete_session`。
+- 短事务同步写入，不阻塞在采集回调（由调用方在事件循环中按需使用）。
+
+### 测试
+
+新增 9 个：v2 表/索引、v1 升级保留 settings、session 幂等、写入/读取顺序、重复、
+来源过滤/limit、无会话报错、结束/级联删除、无音频列。
+
+Python **382 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

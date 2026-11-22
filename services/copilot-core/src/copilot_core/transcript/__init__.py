@@ -2,12 +2,15 @@
 
 from .assembler import AssemblerStats, TranscriptAssembler, TranscriptSegment
 from .buffer import BufferStats, GapRange, TranscriptBuffer
+from .store import SessionRecord, TranscriptStore
 
 __all__ = [
     "AssemblerStats",
     "BufferStats",
     "GapRange",
+    "SessionRecord",
     "TranscriptAssembler",
     "TranscriptBuffer",
     "TranscriptSegment",
+    "TranscriptStore",
 ]

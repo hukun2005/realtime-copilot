@@ -26,6 +26,42 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         )
         """,
     ),
+    2: (
+        """
+        CREATE TABLE IF NOT EXISTS meeting_sessions (
+            id TEXT PRIMARY KEY,
+            generation INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            mode TEXT NOT NULL DEFAULT 'standalone',
+            status TEXT NOT NULL DEFAULT 'active'
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS transcript_segments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES meeting_sessions(id) ON DELETE CASCADE,
+            generation INTEGER NOT NULL,
+            segment_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            start_ts_ns INTEGER NOT NULL,
+            end_ts_ns INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            provider TEXT,
+            created_at INTEGER NOT NULL,
+            UNIQUE(session_id, segment_id)
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_transcript_session_start
+        ON transcript_segments(session_id, start_ts_ns)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_transcript_source_start
+        ON transcript_segments(session_id, source, start_ts_ns)
+        """,
+    ),
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)
