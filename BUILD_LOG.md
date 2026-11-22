@@ -1494,7 +1494,45 @@ Aliyun 分类 CER micro：
 - 仅 Aliyun 有结果，Deepgram 无 Key 为 `NOT_RUN`；
 - 不代表真实会议/面试回答延迟。
 
+## 2026-11-22 · P35-05：长时间稳定性（30/60 分钟）
+
+分支 `feature/p3.4-transcript-p3.5-evaluation`；TTS 音频，非真实会议。
+
+### 30 分钟单来源
+
+- SHA：`998987297dada9c25283d0c29e59d9491b6c2179`，`gitDirty=false`
+- 墙钟 1,803.4s；帧 88,549；VAD 513；final 513；ASR 错误 0
+- 转写：DB 521 段，会话 `completed`
+- 连接尝试 **2**（验证 + 复用）；PCM 峰值 600,960 B
+- final P50/P95：577.7 / 1,314.1 ms
+- 内存：WS 65.3 MB / Private 47.7 MB / Peak 68.6 MB
+
+### 60 分钟双来源
+
+- SHA：`efd3e4cccb0bd5117979c1a603f17481e3d4cbb7`，`gitDirty=false`
+- 墙钟 3,603.8s；loopback 帧 177,058；VAD 730；final 604（loopback 123 / mic 481）；错误 0
+- 转写：DB 608 段，会话 `completed`
+- 连接尝试 **3**（验证 + loopback + mic）；PCM 峰值 2,049,920 B
+- final P50/P95：284.6 / 3,418.4 ms（P95 由长段拖尾）
+- 内存：WS 44.6 MB / Private 52.2 MB / Peak 92.1 MB
+
+报告：`evaluation/reports/stability-30min.json`、`stability-60min-dual.json`。
+
+### 首轮 60 分钟 FAIL 的根因
+
+首轮 60 分钟在 `capture.stop` 后固定等 2s 就查 DB，转写会话尚未标 completed，报告误判 FAIL；
+Core 退出后复查为 `completed`、1,214 段。已改为轮询等待 `status=completed`（最多 20s）后重跑，
+上表为重跑 PASS。不是转写/ASR 产品故障。
+
+### 限制
+
+- TTS 循环音频，不是真实会议；不代表真实会议稳定性。
+- 60 分钟 loopback/mic 的 final 数量差异来自外放拾音/内容，不代表固定比例。
+- 单次运行，未做多轮重复；P95 受长段影响明显。
+- 内存为单次采样，未做泄漏趋势分析。
+
 ### 变更记录
+
 
 
 

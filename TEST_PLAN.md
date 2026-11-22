@@ -443,3 +443,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 分位 | 最近秩 P50/P95；空序列/无 final 正确处理 |
 | 口径 | first partial/final/finalization 分开；注明非回答延迟 |
 | Provider | 缺 Key => NOT_RUN；静音无 final 不计入分位 |
+
+
+### P35-05 长时间稳定性
+
+| 类别 | 断言 |
+|---|---|
+| 30 分钟 | 单来源，ASR/转写错误 0，会话 completed |
+| 60 分钟 | 双来源，ASR/转写错误 0，会话 completed |
+| 资源 | 连接次数、PCM 峰值、内存、丢帧/丢段 |
+| 绑定 | 报告记录 SHA、gitDirty、Windows、模型 |

@@ -116,3 +116,11 @@ uv run python scripts/eval_latency.py --providers aliyun deepgram
 - `firstPartialMs` / `finalMs` 从整段音频提交开始；
 - `finalizationMs` 减去上传耗时估计（约 10x 实时发送）；
 - 不是面试回答延迟；真实会议流式延迟仍需单独测量。
+
+
+## 长时间稳定性（P35-05）
+
+- `reports/stability-30min.json`：30 分钟单来源
+- `reports/stability-60min-dual.json`：60 分钟双来源
+
+均为 TTS 合成音频，只证明链路稳定性，不代表真实会议识别质量。
