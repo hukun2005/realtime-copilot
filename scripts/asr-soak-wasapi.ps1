@@ -11,7 +11,8 @@
 param(
     [double]$Minutes = 30,
     [int]$Interval = 30,
-    [switch]$Mic
+    [switch]$Mic,
+    [switch]$KeepData
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,6 +111,8 @@ finally {
         Write-Host "[soak] FAILED; core.err:"
         if (Test-Path (Join-Path $dataDir "core.err")) { Get-Content (Join-Path $dataDir "core.err") -Tail 40 | Out-Host }
         if (Test-Path (Join-Path $dataDir "core.out")) { Get-Content (Join-Path $dataDir "core.out") -Tail 40 | Out-Host }
+        Write-Host "[soak] data dir kept: $dataDir"
+    } elseif ($KeepData) {
         Write-Host "[soak] data dir kept: $dataDir"
     } else {
         Remove-Item -Recurse -Force $dataDir -ErrorAction SilentlyContinue
