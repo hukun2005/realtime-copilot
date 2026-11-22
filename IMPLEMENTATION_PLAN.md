@@ -249,6 +249,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P3.3 连接复用 | 每来源 session/lock、顺序 run-task/finish-task、空闲重建、失败废弃与单次重试 |
 | P3.4 转写链路 | Assembler/Buffer/Store/Handler、SQLite v2、transcript 事件、生命周期、healthz、集成验收 |
 | P3.5 评测 | 合成/本地数据集、CER/WER、Provider 对比、延迟、稳定性、真实会议记录 |
+| P4 问题检测 | 转写管理、规则分类、追问关联、状态机、手动入口、人工标注评测 |
 
 **未完成**
 
