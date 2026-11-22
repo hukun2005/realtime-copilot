@@ -1140,7 +1140,30 @@ Python **338 passed / 3 skipped**；ruff 通过。
 说明：首次 60 分钟运行因机器休眠只采集到约 12 分钟，报告已作废；修复为 `SetThreadExecutionState` 防休眠 +
 墙钟/帧率校验后重跑，上表为有效结果。TTS 音频，非真实会议；无 WER。
 
+## 2026-11-22 · P34-01：TranscriptAssembler
+
+基线 `cc6c6d2`；分支 `feature/p3.4-transcript-p3.5-evaluation`。
+
+### 实现
+
+- 新增 `copilot_core/transcript/assembler.py`：纯 Python，不依赖 FastAPI/WS/SQLite。
+- 每来源待装配窗口（默认 3），按 `start_ts_ns` 排序；窗口溢出先产出最早一条，缓冲有界。
+- 重复 `(generation, segment_id)` 去重；旧 generation 计数 `stale` 并丢弃。
+- 相邻/重叠 Segment 在 `merge_gap_ms`（默认 200ms）内合并；中文直接拼接，英文/数字保留空格。
+- 空文本与纯标点计入 `empty`，不进入缓冲。
+- 大间隙（>2s）只计数 `gaps`，不插入占位文本。
+- `flush()` 产出全部剩余缓冲；`reset(generation)` 清空会话状态。
+- 统计：accepted/emitted/duplicates/out_of_order/merged/gaps/stale/empty/overflow_emitted。
+
+### 测试
+
+新增 12 个：排序、重复、乱序、相邻合并、英文空格、空/纯标点、generation 隔离、
+reset、缓冲上限、双来源、gap、revision/provider 保留。
+
+Python **361 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
