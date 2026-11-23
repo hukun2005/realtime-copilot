@@ -8,9 +8,10 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Protocol
 
-from ..detection import AnswerContext, Question
+from ..detection import AnswerContext, Detection, Question
 from .events import RuntimeEvent
 from .models import AnswerTask, TaskState
+from .review import ReviewService
 
 
 class StreamProvider(Protocol):
@@ -31,10 +32,12 @@ class AnswerRuntime:
         provider: StreamProvider,
         publish: Callable[[RuntimeEvent], Awaitable[None]],
         context_factory: ContextFactory | None = None,
+        reviewer: ReviewService | None = None,
     ) -> None:
         self._provider = provider
         self._publish = publish
         self._context_factory = context_factory or _default_context
+        self._reviewer = reviewer
         self._tasks: dict[str, AnswerTask] = {}
         self._handles: dict[str, asyncio.Task[None]] = {}
         self._session_active: dict[str, str] = {}
@@ -84,6 +87,22 @@ class AnswerRuntime:
     async def _execute(self, task: AnswerTask, *, project_id: str | None) -> None:
         try:
             await self._emit(task, "answer.started", {"question": task.question.text, "status": "running"})
+            if self._reviewer is not None:
+                detection = Detection(
+                    is_question=True,
+                    question_type=task.question.question_type,
+                    confidence=task.question.confidence,
+                    text=task.question.text,
+                    normalized_text=task.question.normalized_text,
+                    reason="runtime",
+                    source=task.question.source,
+                    segment_id=task.question.segment_id,
+                )
+                outcome = await self._reviewer.review(question=task.question, detection=detection)
+                if not self._reviewer.should_answer(outcome, detection):
+                    task.finish(TaskState.CANCELLED)
+                    await self._emit(task, "answer.cancelled", {"reason": "review_rejected"})
+                    return
             context = await self._context_factory(task.question, project_id)
             async for chunk in self._provider.stream(question=task.question, context=context):
                 if not self._is_current(task):
