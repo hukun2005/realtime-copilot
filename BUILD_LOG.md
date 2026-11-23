@@ -1935,7 +1935,15 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 ### 未完成
 - P52-02 双端消费/C# 同步、P52-03 Publisher、P52-04 WS、P52-05 前端。
 
+## 2026-11-23 · P52-02：answer 类型消费
+
+- Python 端新增 2 个测试，验证 5 个 answer fixtures 的公共字段、payload 枚举/usage。
+- TypeScript 端由生成类型 + 既有 fixtures/typecheck 覆盖。
+- C# 仅发送音频帧，不消费 JSON 事件，无需 DTO 同步；已确认不新增 C# 模型。
+- Python 协议 51 passed；TS 类型检查通过。
+
 ### 变更记录
+
 
 
 
