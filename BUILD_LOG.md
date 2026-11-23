@@ -1902,7 +1902,22 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 测试 4 个：分离+引用、无命中、数据库异常降级、runtime 注入。
 - 全量 521 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P51-05：SSE Answer 栈
+
+- `build_answer_stack` 复用 DeepSeekClient/Provider/Review/RAG，装配 AnswerRuntime。
+- 完整 Mock SSE：Review confirmed → SSE 两个 chunk → completed；事件 started/delta/delta/completed。
+- Review rejected → cancelled(review_rejected)，SSE 请求 0 次。
+- `AnswerStack.close` 取消运行中任务并关闭 HTTP 客户端/上游。
+- 取消/抢占/终态已由 P51-01 + P5 SSE 测试覆盖。
+- 全量 523 passed / 3 skipped；ruff 通过。
+
+### 未完成
+- 生产 app 尚未装配 AnswerStack（需 P52 发布 answer 协议事件）。
+- P52 Schema/WS/前端未做。
+- 真实 DeepSeek 全栈冒烟未运行。
+
 ### 变更记录
+
 
 
 
