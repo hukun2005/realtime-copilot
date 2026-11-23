@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from copilot_protocol import PROTOCOL_VERSION, event_to_wire, make_asr_status
 
+from .answering import FinalGuard
 from .asr import AsrCoordinator, AsrProviderConfig, AsrRegistry, AsrStatusTracker
 from .audio import AudioHub
 from .capture import CaptureController
@@ -87,14 +88,30 @@ def create_app(
         if getattr(event, "type", None) != "asr.final":
             return
         try:
-            payload = event_to_wire(event)["payload"]
-            app.state.detection.ingest_final(
+            wire = event_to_wire(event)
+            payload = wire["payload"]
+            question, _detection = app.state.detection.ingest_final(
                 segment_id=payload["segmentId"],
                 source=payload["source"],
                 text=payload["text"],
             )
+            if question is None:
+                return
+            runtime = getattr(app.state, "answer_runtime", None)
+            if runtime is None:
+                return
+            session_id = getattr(handler, "session_id", None) or "standalone"
+            if not app.state.final_guard.accept(
+                event_id=str(wire.get("eventId") or ""),
+                session_id=session_id,
+                source=payload["source"],
+                segment_id=payload["segmentId"],
+                text=payload["text"],
+            ):
+                return
+            await runtime.submit_question(question, session_id=session_id)
         except Exception:
-            logger.exception("question detection failed")
+            logger.exception("question runtime failed")
 
     tickets = TicketIssuer(ttl_seconds=config.capture.ticket_ttl_seconds)
     @asynccontextmanager
@@ -155,6 +172,8 @@ def create_app(
     app.state.port = 0
     app.state.audio = AudioHub(config.audio)
     app.state.detection = QuestionEngine()
+    app.state.final_guard = FinalGuard()
+    app.state.answer_runtime = None
     asr_coordinator: AsrCoordinator | None = None
     provider_name = os.environ.get("RTC_ASR_PROVIDER")
     if provider_name:
