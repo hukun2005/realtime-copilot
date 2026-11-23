@@ -7,6 +7,7 @@ import socket
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -61,6 +62,7 @@ class LiveServer:
     port: int
     token: str
     runtime_path: Path
+    app: Any
 
     @property
     def url(self) -> str:
@@ -102,7 +104,7 @@ async def live_server(config: AppConfig, token: str, data_dir: Path) -> AsyncIte
         await asyncio.sleep(0.02)
     assert server.started, "uvicorn did not start"
 
-    yield LiveServer(port=port, token=token, runtime_path=runtime_path)
+    yield LiveServer(port=port, token=token, runtime_path=runtime_path, app=app)
 
     server.should_exit = True
     await asyncio.wait_for(task, timeout=10)
