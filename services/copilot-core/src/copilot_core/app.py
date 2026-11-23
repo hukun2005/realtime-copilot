@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
 from .detection import QuestionEngine
+from .github import GitHubClient, GitHubError
 from .knowledge import KnowledgeStore
 from .logging_setup import get_logger
 from .memory import process_memory
@@ -276,6 +278,20 @@ def create_app(
     async def require_resume_token(x_copilot_token: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_copilot_token, token):
             raise HTTPException(status_code=401, detail="unauthorized")
+
+    @app.get("/api/github/repo")
+    async def github_repo(full_name: str, _: None = Depends(require_resume_token)) -> dict[str, Any]:
+        if "/" not in full_name:
+            raise HTTPException(status_code=400, detail="full_name_required")
+        owner, repo = full_name.split("/", 1)
+        client = GitHubClient(token=os.environ.get("GITHUB_TOKEN"))
+        try:
+            item = await client.get_repo(owner, repo)
+        except GitHubError as error:
+            raise HTTPException(status_code=400, detail=error.code) from error
+        finally:
+            await client.close()
+        return asdict(item)
 
     @app.get("/api/knowledge/search")
     def search_knowledge(
