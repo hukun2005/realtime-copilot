@@ -1975,7 +1975,15 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 桌面测试 15 passed；typecheck 通过。
 - 未接 UI 悬浮窗/WebSocket client；本阶段只验证消费能力。
 
+## 2026-11-23 · P53 真实 API 状态
+
+- 真实 DeepSeek Review/SSE 调用失败：HTTP 402（余额不足）。
+- LIVE_VERIFIED = **FAILED**，不是 PASS；无真实 delta 证据。
+- Mock 集成：ASR→QuestionEngine→Runtime、RAG、SSE 栈、Publisher、WS 订阅均有测试。
+- 真实 DeepSeek→WS 端到端：**NOT_RUN**。
+
 ### 变更记录
+
 
 
 
