@@ -1874,7 +1874,18 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 测试 7 个：正常/取消/抢占/隔离/幂等/失败/清理。
 - 基线 flaky：`test_ws.py`/`test_asr.py` 历史 lastfailed，连续 3 轮 25/25 通过，未复现。
 
+## 2026-11-23 · P51-02：ASR Final 接入运行时
+
+- app.asr_events 消费 QuestionEngine.ingest_final 的返回值；有效问题提交 AnswerRuntime。
+- 新增 FinalGuard：空/纯标点/过短/无中英文拒绝；按 eventId + (session,source,segment) 去重；
+  不按文本永久去重；loopback/mic 独立。
+- runtime 为空时不启动回答；runtime 异常只记日志，不影响 ASR 广播/转写/检测。
+- 集成测试：有效 final 触发一次、同 event/segment 重复不触发、重复问题新 segment 允许、
+  跨来源允许、runtime 故障不破坏检测。
+- 全量 510 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 

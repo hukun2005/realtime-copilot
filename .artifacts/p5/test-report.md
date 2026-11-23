@@ -1,7 +1,7 @@
-# P51-01 测试报告
+# P51-02 测试报告
 
-- `uv run pytest services/copilot-core/tests/test_answer_runtime.py -q` → 7 passed
-- 覆盖：正常流/终态唯一/sequence、主动取消、上游关闭、新问题抢占 generation、
-  session 隔离、重复 submit 幂等、provider 失败、cancel_session/cleanup。
-- `uv run pytest -q` → 全量结果见 BUILD_LOG。
-- Mock only；真实 DeepSeek 未在本阶段调用。
+- `test_answer_runtime_app.py`：3 passed（有效 final 触发、去重/来源隔离、runtime 故障隔离、guard 校验）
+- `test_answer_runtime.py`：7 passed
+- 全量 `uv run pytest -q` → 510 passed / 3 skipped
+- ruff 通过
+- 真实 ASR/DeepSeek 未调用；仍为 Mock 集成。
