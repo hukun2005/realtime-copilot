@@ -1810,7 +1810,30 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 
 新增 2 个：FTS5 搜索/过滤/去重/无命中；简历与分析块来源。Python **496 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-23 · RI-5：项目证据 + 通用知识 RAG（核心）
+
+基线 `0a7b19e`；分支 `feature/ri-5-rag`。
+
+### 已实现
+
+- `build_rag_context`：按项目检索项目证据，另检索 technical；两类严格分字段。
+- 引用保留 chunk/source/repository/commit/file/start/end/symbol。
+- 项目过滤；无命中标 `missing`，不强行塞证据。
+- `rag_answer_context` 转成现有 `AnswerContext`，可直接接 DeepSeek stream。
+- 有长度预算，超限截断，避免整仓库入 Prompt。
+
+### 未实现
+
+- 未接 QuestionEngine→RAG→stream 的运行时编排/API/UI。
+- 未做 Embedding/Hybrid/Reranker。
+- 未用真实仓库做检索质量评测。
+
+### 测试
+
+新增 3 个：证据/知识分离+引用、项目隔离、无命中降级。Python **499 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
