@@ -1859,7 +1859,20 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 未接 GitHub/分析 API、未接桌面 IPC/页面。
 - 测试 1 个；Python 500 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P51-01：Answer Runtime
+
+基线 `76d9c7e`；分支 `feature/p5-realtime-answer-runtime`。
+
+- 新增 `runtime/`：AnswerTask、RuntimeEvent、AnswerRuntime。
+- 每 session generation + 单 active request；新问题取消旧任务；旧 generation 不再发布 delta。
+- `submit_question/cancel/cancel_session/status/cleanup`；重复 submit 幂等。
+- 事件 started/delta/completed/cancelled/failed，sequence 递增，终态唯一。
+- provider 异常→failed；发布者异常计数不杀死任务；取消关闭异步生成器。
+- 测试 7 个：正常/取消/抢占/隔离/幂等/失败/清理。
+- 基线 flaky：`test_ws.py`/`test_asr.py` 历史 lastfailed，连续 3 轮 25/25 通过，未复现。
+
 ### 变更记录
+
 
 
 
