@@ -1967,7 +1967,16 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 新增协议映射测试；全量 544 passed / 3 skipped。
 - **未完成**：WS 重连/sequence 去重/快照、订阅集成测试、P52-05 前端。
 
+## 2026-11-23 · P52-05：前端答案事件消费
+
+- 新增 `renderer/services/answer-store.ts`：纯状态机，按 session/request/generation/sequence
+  去重；状态 idle/running/completed/cancelled/failed；终态后拒绝 delta。
+- 新增 4 个 Vitest：正常拼接、重复/乱序、旧 generation/终态、session 隔离。
+- 桌面测试 15 passed；typecheck 通过。
+- 未接 UI 悬浮窗/WebSocket client；本阶段只验证消费能力。
+
 ### 变更记录
+
 
 
 
