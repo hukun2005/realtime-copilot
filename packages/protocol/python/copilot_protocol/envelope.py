@@ -14,6 +14,11 @@ from typing import Any, TypeAlias
 from pydantic import BaseModel, ValidationError
 
 from .models import (
+    AnswerCancelledEvent,
+    AnswerCompletedEvent,
+    AnswerDeltaEvent,
+    AnswerFailedEvent,
+    AnswerStartedEvent,
     AsrErrorEvent,
     AsrFinalEvent,
     AsrPartialEvent,
@@ -51,6 +56,11 @@ EVENT_TYPES: tuple[str, ...] = (
     "asr.error",
     "transcript.segment",
     "transcript.reset",
+    "answer.started",
+    "answer.delta",
+    "answer.completed",
+    "answer.cancelled",
+    "answer.failed",
 )
 
 ConcreteEvent: TypeAlias = (
@@ -62,6 +72,11 @@ ConcreteEvent: TypeAlias = (
     | AudioStatusEvent
     | CaptureStartEvent
     | CaptureStopEvent
+    | AnswerStartedEvent
+    | AnswerDeltaEvent
+    | AnswerCompletedEvent
+    | AnswerCancelledEvent
+    | AnswerFailedEvent
 )
 
 

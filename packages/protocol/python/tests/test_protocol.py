@@ -102,8 +102,16 @@ def test_non_object_and_malformed_json_rejected() -> None:
 def test_envelope_is_uniform_across_events() -> None:
     defs = {name: spec for name, spec in SCHEMA["$defs"].items() if name.endswith("Event")}
     assert len(defs) == len(EVENT_TYPES)
+    answer_types = {"answer.started", "answer.delta", "answer.completed", "answer.cancelled", "answer.failed"}
     for name, spec in defs.items():
-        assert spec["required"] == ["v", "type", "eventId", "ts", "payload"], name
+        event_type = spec["properties"]["type"].get("const", "")
+        if event_type in answer_types:
+            assert spec["required"] == [
+                "v", "type", "eventId", "requestId", "sessionId",
+                "questionId", "generation", "sequence", "ts", "payload",
+            ], name
+        else:
+            assert spec["required"] == ["v", "type", "eventId", "ts", "payload"], name
         assert spec["properties"]["v"] == {"const": PROTOCOL_VERSION}, name
         assert spec["additionalProperties"] is False, name
 

@@ -97,14 +97,27 @@ describe('信封一致性', () => {
   }
 
   const envelopeKeys = ['v', 'type', 'eventId', 'requestId', 'ts', 'payload']
+  const answerKeys = [...envelopeKeys, 'sessionId', 'questionId', 'generation', 'sequence']
+  const answerTypes = new Set([
+    'answer.started', 'answer.delta', 'answer.completed', 'answer.cancelled', 'answer.failed',
+  ])
 
   it('每个事件定义使用同一组信封字段', () => {
     const eventDefs = Object.entries(schema.$defs).filter(([key]) => key.endsWith('Event'))
     expect(eventDefs).toHaveLength(EVENT_TYPES.length)
 
     for (const [key, def] of eventDefs) {
-      expect(def.required, key).toEqual(['v', 'type', 'eventId', 'ts', 'payload'])
-      expect(Object.keys(def.properties ?? {}).every((name) => envelopeKeys.includes(name)), key).toBe(true)
+      const eventType = String((def.properties?.type as { const?: string } | undefined)?.const)
+      if (answerTypes.has(eventType)) {
+        expect(def.required, key).toEqual([
+          'v', 'type', 'eventId', 'requestId', 'sessionId',
+          'questionId', 'generation', 'sequence', 'ts', 'payload',
+        ])
+        expect(Object.keys(def.properties ?? {}).every((name) => answerKeys.includes(name)), key).toBe(true)
+      } else {
+        expect(def.required, key).toEqual(['v', 'type', 'eventId', 'ts', 'payload'])
+        expect(Object.keys(def.properties ?? {}).every((name) => envelopeKeys.includes(name)), key).toBe(true)
+      }
       expect(def.properties?.v, key).toEqual({ const: PROTOCOL_VERSION })
     }
   })

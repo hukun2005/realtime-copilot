@@ -31,6 +31,11 @@ export const EVENT_TYPES = [
   'asr.error',
   'transcript.segment',
   'transcript.reset',
+  'answer.started',
+  'answer.delta',
+  'answer.completed',
+  'answer.cancelled',
+  'answer.failed',
 ] as const
 
 /** 事件类型别名。 */

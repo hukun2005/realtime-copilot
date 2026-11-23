@@ -1199,6 +1199,418 @@
           "$ref": "#/$defs/TranscriptResetPayload"
         }
       }
+    },
+    "QuestionId": {
+      "title": "QuestionId",
+      "type": "string",
+      "pattern": "^q_[A-Za-z0-9_-]{6,64}$",
+      "description": "问题稳定标识。"
+    },
+    "AnswerQuestionType": {
+      "title": "AnswerQuestionType",
+      "type": "string",
+      "enum": [
+        "technical",
+        "project",
+        "behavioral",
+        "scenario",
+        "follow_up",
+        "general",
+        "statement"
+      ]
+    },
+    "AnswerUsage": {
+      "title": "AnswerUsage",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promptTokens",
+        "completionTokens"
+      ],
+      "properties": {
+        "promptTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "completionTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "AnswerStartedPayload": {
+      "title": "AnswerStartedPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "questionType",
+        "status"
+      ],
+      "properties": {
+        "question": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "questionType": {
+          "$ref": "#/$defs/AnswerQuestionType"
+        },
+        "status": {
+          "const": "running"
+        }
+      }
+    },
+    "AnswerDeltaPayload": {
+      "title": "AnswerDeltaPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delta"
+      ],
+      "properties": {
+        "delta": {
+          "type": "string",
+          "maxLength": 8000
+        }
+      }
+    },
+    "AnswerCompletedPayload": {
+      "title": "AnswerCompletedPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "finishReason",
+        "usage"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "finishReason": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnswerUsage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "AnswerCancelledPayload": {
+      "title": "AnswerCancelledPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "user_cancelled",
+            "superseded",
+            "session_stopped",
+            "shutdown",
+            "timeout"
+          ]
+        }
+      }
+    },
+    "AnswerFailedPayload": {
+      "title": "AnswerFailedPayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AnswerStartedEvent": {
+      "title": "AnswerStartedEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "sessionId",
+        "questionId",
+        "generation",
+        "sequence",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "questionId": {
+          "$ref": "#/$defs/QuestionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "answer.started"
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerStartedPayload"
+        }
+      }
+    },
+    "AnswerDeltaEvent": {
+      "title": "AnswerDeltaEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "sessionId",
+        "questionId",
+        "generation",
+        "sequence",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "questionId": {
+          "$ref": "#/$defs/QuestionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "answer.delta"
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerDeltaPayload"
+        }
+      }
+    },
+    "AnswerCompletedEvent": {
+      "title": "AnswerCompletedEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "sessionId",
+        "questionId",
+        "generation",
+        "sequence",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "questionId": {
+          "$ref": "#/$defs/QuestionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "answer.completed"
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerCompletedPayload"
+        }
+      }
+    },
+    "AnswerCancelledEvent": {
+      "title": "AnswerCancelledEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "sessionId",
+        "questionId",
+        "generation",
+        "sequence",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "questionId": {
+          "$ref": "#/$defs/QuestionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "answer.cancelled"
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerCancelledPayload"
+        }
+      }
+    },
+    "AnswerFailedEvent": {
+      "title": "AnswerFailedEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "sessionId",
+        "questionId",
+        "generation",
+        "sequence",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "questionId": {
+          "$ref": "#/$defs/QuestionId"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "const": "answer.failed"
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerFailedPayload"
+        }
+      }
     }
   },
   "oneOf": [
@@ -1243,6 +1655,21 @@
     },
     {
       "$ref": "#/$defs/TranscriptResetEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerCancelledEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerFailedEvent"
     }
   ]
 }

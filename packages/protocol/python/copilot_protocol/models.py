@@ -518,6 +518,186 @@ class TranscriptResetEvent(BaseModel):
     payload: TranscriptResetPayload
 
 
+class QuestionId(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(
+            description='问题稳定标识。',
+            pattern='^q_[A-Za-z0-9_-]{6,64}$',
+            title='QuestionId',
+        ),
+    ]
+
+
+class AnswerQuestionType(
+    RootModel[
+        Literal[
+            'technical',
+            'project',
+            'behavioral',
+            'scenario',
+            'follow_up',
+            'general',
+            'statement',
+        ]
+    ]
+):
+    root: Annotated[
+        Literal[
+            'technical',
+            'project',
+            'behavioral',
+            'scenario',
+            'follow_up',
+            'general',
+            'statement',
+        ],
+        Field(title='AnswerQuestionType'),
+    ]
+
+
+class AnswerUsage(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    prompt_tokens: Annotated[int | None, Field(alias='promptTokens', ge=0)]
+    completion_tokens: Annotated[int | None, Field(alias='completionTokens', ge=0)]
+
+
+class AnswerStartedPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    question: Annotated[str, Field(max_length=4000)]
+    question_type: Annotated[AnswerQuestionType, Field(alias='questionType')]
+    status: Literal['running']
+
+
+class AnswerDeltaPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    delta: Annotated[str, Field(max_length=8000)]
+
+
+class AnswerCompletedPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    answer: str
+    finish_reason: Annotated[str, Field(alias='finishReason', max_length=64)]
+    usage: AnswerUsage | None
+
+
+class AnswerCancelledPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    reason: Literal[
+        'user_cancelled', 'superseded', 'session_stopped', 'shutdown', 'timeout'
+    ]
+
+
+class AnswerFailedPayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    code: Annotated[str, Field(max_length=64)]
+    message: Annotated[str, Field(max_length=500)]
+    retryable: bool
+
+
+class AnswerStartedEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    question_id: Annotated[QuestionId, Field(alias='questionId')]
+    generation: Annotated[int, Field(ge=0)]
+    sequence: Annotated[int, Field(ge=1)]
+    ts: Annotated[int, Field(ge=0)]
+    type: Literal['answer.started']
+    payload: AnswerStartedPayload
+
+
+class AnswerDeltaEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    question_id: Annotated[QuestionId, Field(alias='questionId')]
+    generation: Annotated[int, Field(ge=0)]
+    sequence: Annotated[int, Field(ge=1)]
+    ts: Annotated[int, Field(ge=0)]
+    type: Literal['answer.delta']
+    payload: AnswerDeltaPayload
+
+
+class AnswerCompletedEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    question_id: Annotated[QuestionId, Field(alias='questionId')]
+    generation: Annotated[int, Field(ge=0)]
+    sequence: Annotated[int, Field(ge=1)]
+    ts: Annotated[int, Field(ge=0)]
+    type: Literal['answer.completed']
+    payload: AnswerCompletedPayload
+
+
+class AnswerCancelledEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    question_id: Annotated[QuestionId, Field(alias='questionId')]
+    generation: Annotated[int, Field(ge=0)]
+    sequence: Annotated[int, Field(ge=1)]
+    ts: Annotated[int, Field(ge=0)]
+    type: Literal['answer.cancelled']
+    payload: AnswerCancelledPayload
+
+
+class AnswerFailedEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+    question_id: Annotated[QuestionId, Field(alias='questionId')]
+    generation: Annotated[int, Field(ge=0)]
+    sequence: Annotated[int, Field(ge=1)]
+    ts: Annotated[int, Field(ge=0)]
+    type: Literal['answer.failed']
+    payload: AnswerFailedPayload
+
+
 class Sources(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -571,6 +751,11 @@ class EventV1(
         | AsrErrorEvent
         | TranscriptSegmentEvent
         | TranscriptResetEvent
+        | AnswerStartedEvent
+        | AnswerDeltaEvent
+        | AnswerCompletedEvent
+        | AnswerCancelledEvent
+        | AnswerFailedEvent
     ]
 ):
     root: Annotated[
@@ -587,7 +772,12 @@ class EventV1(
         | AsrFinalEvent
         | AsrErrorEvent
         | TranscriptSegmentEvent
-        | TranscriptResetEvent,
+        | TranscriptResetEvent
+        | AnswerStartedEvent
+        | AnswerDeltaEvent
+        | AnswerCompletedEvent
+        | AnswerCancelledEvent
+        | AnswerFailedEvent,
         Field(
             description='RealTime Copilot 有线协议 v1。JSON Schema 是唯一事实来源；TypeScript 类型与 Python Pydantic 模型由 scripts/generate.mjs 生成，C# DTO 手写并由 fixtures 往返测试约束。所有事件共用同一 envelope：v/type/eventId/requestId/ts/payload。',
             title='EventV1',

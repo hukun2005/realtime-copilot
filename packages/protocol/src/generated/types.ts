@@ -23,6 +23,11 @@ export type EventV1 =
   | AsrErrorEvent
   | TranscriptSegmentEvent
   | TranscriptResetEvent
+  | AnswerStartedEvent
+  | AnswerDeltaEvent
+  | AnswerCompletedEvent
+  | AnswerCancelledEvent
+  | AnswerFailedEvent
 /**
  * 事件唯一标识；由发送方生成，接收方只用于日志与关联，不承担幂等语义。
  */
@@ -81,6 +86,12 @@ export type AsrSource = 'loopback' | 'mic'
  * 一次采集会话的稳定标识。
  */
 export type SessionId = string
+/**
+ * 问题稳定标识。
+ */
+export type QuestionId = string
+export type AnswerQuestionType =
+  'technical' | 'project' | 'behavioral' | 'scenario' | 'follow_up' | 'general' | 'statement'
 
 export interface HelloEvent {
   v: 1
@@ -320,4 +331,89 @@ export interface TranscriptResetPayload {
   sessionId: SessionId
   generation: number
   reason: 'capture_stopped' | 'generation_changed' | 'error' | 'shutdown'
+}
+export interface AnswerStartedEvent {
+  v: 1
+  eventId: EventId
+  requestId: RequestId
+  sessionId: SessionId
+  questionId: QuestionId
+  generation: number
+  sequence: number
+  ts: number
+  type: 'answer.started'
+  payload: AnswerStartedPayload
+}
+export interface AnswerStartedPayload {
+  question: string
+  questionType: AnswerQuestionType
+  status: 'running'
+}
+export interface AnswerDeltaEvent {
+  v: 1
+  eventId: EventId
+  requestId: RequestId
+  sessionId: SessionId
+  questionId: QuestionId
+  generation: number
+  sequence: number
+  ts: number
+  type: 'answer.delta'
+  payload: AnswerDeltaPayload
+}
+export interface AnswerDeltaPayload {
+  delta: string
+}
+export interface AnswerCompletedEvent {
+  v: 1
+  eventId: EventId
+  requestId: RequestId
+  sessionId: SessionId
+  questionId: QuestionId
+  generation: number
+  sequence: number
+  ts: number
+  type: 'answer.completed'
+  payload: AnswerCompletedPayload
+}
+export interface AnswerCompletedPayload {
+  answer: string
+  finishReason: string
+  usage: AnswerUsage | null
+}
+export interface AnswerUsage {
+  promptTokens: number | null
+  completionTokens: number | null
+}
+export interface AnswerCancelledEvent {
+  v: 1
+  eventId: EventId
+  requestId: RequestId
+  sessionId: SessionId
+  questionId: QuestionId
+  generation: number
+  sequence: number
+  ts: number
+  type: 'answer.cancelled'
+  payload: AnswerCancelledPayload
+}
+export interface AnswerCancelledPayload {
+  reason: 'user_cancelled' | 'superseded' | 'session_stopped' | 'shutdown' | 'timeout'
+}
+export interface AnswerFailedEvent {
+  v: 1
+  eventId: EventId
+  requestId: RequestId
+  sessionId: SessionId
+  questionId: QuestionId
+  generation: number
+  sequence: number
+  ts: number
+  type: 'answer.failed'
+  payload: AnswerFailedPayload
+}
+export interface AnswerFailedPayload {
+  code: string
+  message: string
+  retryable: boolean
 }

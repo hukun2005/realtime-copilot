@@ -6,7 +6,7 @@
 
 | 路径 | 说明 |
 |---|---|
-| `schema/events.v1.json` | JSON Schema（draft 2020-12），定义信封与 8 类事件 |
+| `schema/events.v1.json` | JSON Schema（draft 2020-12），定义信封与 19 类事件 |
 | `src/generated/types.ts` | 由 schema 生成的 TypeScript 类型（勿手改） |
 | `python/copilot_protocol/models.py` | 由 schema 生成的 Pydantic v2 模型（勿手改） |
 | `python/copilot_protocol/envelope.py` | 手写运行时：解析、分类、构造、序列化 |
