@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "answer.subscribe",
+  "eventId": "evt_answer_subscribe_0001",
+  "requestId": "req_01JAY0000000000000000001",
+  "ts": 1763700004000,
+  "payload": {
+    "sessionId": "sess_01JAY0000000000000000001"
+  }
+}

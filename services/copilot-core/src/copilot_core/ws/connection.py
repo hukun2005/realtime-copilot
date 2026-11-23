@@ -22,6 +22,8 @@ from starlette.websockets import WebSocketDisconnect
 
 from copilot_protocol import (
     PROTOCOL_VERSION,
+    AnswerSubscribeEvent,
+    AnswerUnsubscribeEvent,
     AudioStatusEvent,
     CaptureStartEvent,
     CaptureStopEvent,
@@ -40,6 +42,7 @@ from copilot_protocol import (
     parse_event,
 )
 
+from ..answering import AnswerEventPublisher, to_protocol
 from ..audio import AudioHub, AudioSession
 from ..capture import CaptureController
 from ..config import AppConfig
@@ -75,6 +78,8 @@ class EventConnection:
         audio_hub: AudioHub | None = None,
         capture: CaptureController | None = None,
         tickets: TicketIssuer | None = None,
+        answer_publisher: AnswerEventPublisher | None = None,
+        answer_session: Callable[[], str | None] | None = None,
     ) -> None:
         """初始化连接对象。
 
@@ -97,6 +102,10 @@ class EventConnection:
         self._audio_hub = audio_hub
         self._capture = capture
         self._tickets = tickets
+        self._answer_publisher = answer_publisher
+        self._answer_session = answer_session
+        self._answer_sub = None
+        self._answer_pump: asyncio.Task[None] | None = None
         self._audio: AudioSession | None = None
         self._frames_accepted = 0
         self.role: str | None = None
@@ -157,6 +166,7 @@ class EventConnection:
             if self.role == "audio" and self._capture is not None:
                 await self._capture.handle_disconnect(self)
             self._release_audio()
+            await self._stop_answer_subscription()
             if self.role is not None:
                 self._log.info("connection closed", extra={"role": self.role})
 
@@ -312,6 +322,9 @@ class EventConnection:
 
     async def _dispatch(self, event: ConcreteEvent) -> None:
         request_id = getattr(event, "request_id", None)
+        if isinstance(event, (AnswerSubscribeEvent, AnswerUnsubscribeEvent)):
+            await self._handle_answer_subscription(event)
+            return
         if isinstance(event, PingEvent):
             await self._send(make_pong(event.payload.nonce))
             return
@@ -375,6 +388,46 @@ class EventConnection:
                 request_id=request_id,
             )
         )
+
+    async def _handle_answer_subscription(self, event: Any) -> None:
+        request_id = getattr(event, "request_id", None)
+        if self.role not in ("ui", "bridge"):
+            await self._send(make_system_error(code="invalid_role", message="only ui/bridge may subscribe", retryable=False, request_id=request_id))
+            return
+        if self._answer_publisher is None:
+            await self._send(make_system_error(code="unsupported_event", message="answer publisher is not configured", retryable=False, request_id=request_id))
+            return
+        session_id = event.payload.session_id.root
+        current = self._answer_session() if self._answer_session else None
+        if current is not None and session_id != current:
+            await self._send(make_system_error(code="invalid_payload", message="session is not active", retryable=False, request_id=request_id))
+            return
+        if isinstance(event, AnswerUnsubscribeEvent):
+            await self._stop_answer_subscription()
+            return
+        await self._stop_answer_subscription()
+        self._answer_sub = self._answer_publisher.subscribe(session_id, maxsize=100)
+        self._answer_pump = asyncio.create_task(self._answer_pump_loop(self._answer_sub))
+
+    async def _answer_pump_loop(self, subscription: Any) -> None:
+        while True:
+            event = await subscription.get()
+            if event is None:
+                return
+            try:
+                await self._send(to_protocol(event))
+            except Exception:
+                return
+
+    async def _stop_answer_subscription(self) -> None:
+        if self._answer_sub is not None and self._answer_publisher is not None:
+            self._answer_publisher.unsubscribe(self._answer_sub)
+        self._answer_sub = None
+        if self._answer_pump is not None:
+            self._answer_pump.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._answer_pump
+            self._answer_pump = None
 
     # ------------------------------------------------------------------ 心跳
 

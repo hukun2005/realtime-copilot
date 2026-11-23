@@ -1611,6 +1611,100 @@
           "$ref": "#/$defs/AnswerFailedPayload"
         }
       }
+    },
+    "AnswerSubscribePayload": {
+      "title": "AnswerSubscribePayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionId"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      }
+    },
+    "AnswerSubscribeEvent": {
+      "title": "AnswerSubscribeEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "answer.subscribe"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerSubscribePayload"
+        }
+      }
+    },
+    "AnswerUnsubscribePayload": {
+      "title": "AnswerUnsubscribePayload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionId"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        }
+      }
+    },
+    "AnswerUnsubscribeEvent": {
+      "title": "AnswerUnsubscribeEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v",
+        "type",
+        "eventId",
+        "requestId",
+        "ts",
+        "payload"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "answer.unsubscribe"
+        },
+        "eventId": {
+          "$ref": "#/$defs/EventId"
+        },
+        "requestId": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AnswerUnsubscribePayload"
+        }
+      }
     }
   },
   "oneOf": [
@@ -1670,6 +1764,12 @@
     },
     {
       "$ref": "#/$defs/AnswerFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerSubscribeEvent"
+    },
+    {
+      "$ref": "#/$defs/AnswerUnsubscribeEvent"
     }
   ]
 }

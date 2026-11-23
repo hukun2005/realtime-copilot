@@ -698,6 +698,48 @@ class AnswerFailedEvent(BaseModel):
     payload: AnswerFailedPayload
 
 
+class AnswerSubscribePayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+
+
+class AnswerSubscribeEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['answer.subscribe']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    ts: Annotated[int, Field(ge=0)]
+    payload: AnswerSubscribePayload
+
+
+class AnswerUnsubscribePayload(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    session_id: Annotated[SessionId, Field(alias='sessionId')]
+
+
+class AnswerUnsubscribeEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+        populate_by_name=True,
+    )
+    v: Literal[1]
+    type: Literal['answer.unsubscribe']
+    event_id: Annotated[EventId, Field(alias='eventId')]
+    request_id: Annotated[RequestId, Field(alias='requestId')]
+    ts: Annotated[int, Field(ge=0)]
+    payload: AnswerUnsubscribePayload
+
+
 class Sources(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -756,6 +798,8 @@ class EventV1(
         | AnswerCompletedEvent
         | AnswerCancelledEvent
         | AnswerFailedEvent
+        | AnswerSubscribeEvent
+        | AnswerUnsubscribeEvent
     ]
 ):
     root: Annotated[
@@ -777,7 +821,9 @@ class EventV1(
         | AnswerDeltaEvent
         | AnswerCompletedEvent
         | AnswerCancelledEvent
-        | AnswerFailedEvent,
+        | AnswerFailedEvent
+        | AnswerSubscribeEvent
+        | AnswerUnsubscribeEvent,
         Field(
             description='RealTime Copilot 有线协议 v1。JSON Schema 是唯一事实来源；TypeScript 类型与 Python Pydantic 模型由 scripts/generate.mjs 生成，C# DTO 手写并由 fixtures 往返测试约束。所有事件共用同一 envelope：v/type/eventId/requestId/ts/payload。',
             title='EventV1',

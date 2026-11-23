@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 from copilot_protocol import PROTOCOL_VERSION, event_to_wire, make_asr_status
 
-from .answering import FinalGuard
+from .answering import AnswerEventPublisher, FinalGuard, build_answer_stack
 from .asr import AsrCoordinator, AsrProviderConfig, AsrRegistry, AsrStatusTracker
 from .audio import AudioHub
 from .capture import CaptureController
@@ -126,6 +126,17 @@ def create_app(
             broadcast=broadcast,
             logger=get_logger("copilot_core.transcript"),
         )
+        answer_stack = None
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            try:
+                answer_stack = build_answer_stack(
+                    store=KnowledgeStore(database),
+                    publish=app.state.answer_publisher.publish,
+                )
+                app.state.answer_runtime = answer_stack.runtime
+                app.state.answer_stack = answer_stack
+            except Exception:
+                logger.exception("answer runtime creation failed")
         app.state.started_at = time.monotonic()
         if runtime_path is not None:
             info = build_runtime_info(
@@ -146,6 +157,8 @@ def create_app(
         try:
             yield
         finally:
+            if getattr(app.state, "answer_stack", None) is not None:
+                await app.state.answer_stack.close()
             await controller.shutdown()
             if asr_coordinator is not None:
                 await asr_coordinator.stop()
@@ -173,6 +186,7 @@ def create_app(
     app.state.audio = AudioHub(config.audio)
     app.state.detection = QuestionEngine()
     app.state.final_guard = FinalGuard()
+    app.state.answer_publisher = AnswerEventPublisher()
     app.state.answer_runtime = None
     asr_coordinator: AsrCoordinator | None = None
     provider_name = os.environ.get("RTC_ASR_PROVIDER")
@@ -408,6 +422,8 @@ def create_app(
             audio_hub=app.state.audio,
             capture=controller,
             tickets=tickets,
+            answer_publisher=app.state.answer_publisher,
+            answer_session=lambda: getattr(app.state.transcript_handler, "session_id", None),
         )
         try:
             await connection.run()

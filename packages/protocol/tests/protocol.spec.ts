@@ -108,7 +108,10 @@ describe('信封一致性', () => {
 
     for (const [key, def] of eventDefs) {
       const eventType = String((def.properties?.type as { const?: string } | undefined)?.const)
-      if (answerTypes.has(eventType)) {
+      if (eventType === 'answer.subscribe' || eventType === 'answer.unsubscribe') {
+        expect(def.required, key).toEqual(['v', 'type', 'eventId', 'requestId', 'ts', 'payload'])
+        expect(Object.keys(def.properties ?? {}).every((name) => envelopeKeys.includes(name)), key).toBe(true)
+      } else if (answerTypes.has(eventType)) {
         expect(def.required, key).toEqual([
           'v', 'type', 'eventId', 'requestId', 'sessionId',
           'questionId', 'generation', 'sequence', 'ts', 'payload',
