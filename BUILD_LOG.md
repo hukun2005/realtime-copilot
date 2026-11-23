@@ -1950,7 +1950,15 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 测试 4 个：隔离、终态保留、退订、慢订阅者不阻塞。
 - 全量 539 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P52-04：答案事件协议映射（部分）
+
+- 新增 `answering/protocol.py`：RuntimeEvent → 生成模型 Answer*Event，补齐 eventId/ts。
+- 5 类事件映射测试通过；sequence/request/session/question 原样保留。
+- **未完成**：EventConnection session 订阅/WS 泵、认证订阅、重连/重放。
+- 全量 540 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 

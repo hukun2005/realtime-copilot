@@ -5,6 +5,7 @@ from .events import RuntimeEvent
 from .factory import AnswerStack, build_answer_stack
 from .ingest import FinalGuard, is_meaningful
 from .models import AnswerTask, TaskState
+from .protocol import to_protocol
 from .publisher import AnswerEventPublisher, Subscription
 from .rag import RagContextBuilder
 from .review import ReviewOutcome, ReviewService, ReviewStatus, deepseek_review_call
@@ -27,4 +28,5 @@ __all__ = [
     "build_answer_stack",
     "deepseek_review_call",
     "is_meaningful",
+    "to_protocol",
 ]
