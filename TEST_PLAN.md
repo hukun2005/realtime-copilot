@@ -505,3 +505,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 符号 | Python/TS/JS/C#/Vue、路由、Store、模型 |
 | 证据 | repo/commit/file/start/end/summary；UNKNOWN/INFERENCE |
 | 版本 | v5 快照/报告按 commit 保存，不覆盖历史 |
+
+
+### RI-4 知识库
+
+| 类别 | 断言 |
+|---|---|
+| FTS5 | 中文/英文子串、bm25、无命中空 |
+| 来源 | resume/repository/analysis/technical 隔离 |
+| 过滤 | project/repository/commit/source |
+| 去重 | chunk_id 重复不插入；保留行号/commit |
