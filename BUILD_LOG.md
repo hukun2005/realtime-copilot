@@ -1849,7 +1849,18 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 悬浮窗、实时转写/问题/答案展示。
 - 页面组件拆分；当前仍在 App.vue。
 
+## 2026-11-23 · RI-6b：Core API（知识库/RAG）
+
+基线 `5528987`；分支 `feature/ri-6b-core-api`。
+
+- 新增 `GET /api/knowledge/search`（q/project/source/limit，Token）。
+- 新增 `POST /api/rag/context`（question/projectId，返回项目证据、技术知识、引用、missing）。
+- 复用 QuestionEngine/KnowledgeStore/RAG；无命中不伪造。
+- 未接 GitHub/分析 API、未接桌面 IPC/页面。
+- 测试 1 个；Python 500 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 
