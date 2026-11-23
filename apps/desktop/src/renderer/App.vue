@@ -5,6 +5,16 @@ import type { ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
 
 const snapshot = ref<DesktopSnapshot | null>(null)
 const error = ref<string | null>(null)
+type View = 'dashboard' | 'resume' | 'github' | 'analysis' | 'knowledge' | 'settings'
+const activeView = ref<View>('dashboard')
+const views: { id: View; label: string }[] = [
+  { id: 'dashboard', label: '总览' },
+  { id: 'resume', label: '简历' },
+  { id: 'github', label: 'GitHub' },
+  { id: 'analysis', label: '代码分析' },
+  { id: 'knowledge', label: '知识库' },
+  { id: 'settings', label: '设置' },
+]
 const resumes = ref<ResumeRecord[]>([])
 const resumeError = ref<string | null>(null)
 const uploading = ref(false)
@@ -175,7 +185,13 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <section class="cards">
+    <nav class="tabs">
+      <button v-for="view in views" :key="view.id" type="button" :class="{ active: activeView === view.id }" @click="activeView = view.id">
+        {{ view.label }}
+      </button>
+    </nav>
+
+    <section v-if="activeView === 'dashboard'" class="cards">
       <article class="card" :data-tone="coreTone">
         <h2>Core 服务</h2>
         <p class="value">{{ coreLabel }}</p>
@@ -201,7 +217,7 @@ onUnmounted(() => {
       </article>
     </section>
 
-    <section class="resumes">
+    <section v-if="activeView === 'resume'" class="resumes">
       <div class="resume-head">
         <h2>简历管理</h2>
         <label class="upload">
@@ -230,14 +246,22 @@ onUnmounted(() => {
       </article>
     </section>
 
-    <section v-if="problems.length > 0" class="problems">
+    <section v-if="activeView !== 'dashboard'" class="placeholder">
+      <h2>{{ views.find((item) => item.id === activeView)?.label }}</h2>
+      <p v-if="activeView === 'github'">GitHub 仓库关联页面将在后续批次接入；当前后端核心已完成。</p>
+      <p v-else-if="activeView === 'analysis'">代码分析页面将在后续批次接入；当前后端已完成 Tree/静态分析。</p>
+      <p v-else-if="activeView === 'knowledge'">知识库检索页面将在后续批次接入；当前 FTS5 已完成。</p>
+      <p v-else>面试设置与悬浮窗将在后续批次接入。</p>
+    </section>
+
+    <section v-if="activeView === 'dashboard' && problems.length > 0" class="problems">
       <h2>需要处理</h2>
       <ul>
         <li v-for="problem in problems" :key="problem">{{ problem }}</li>
       </ul>
     </section>
 
-    <section class="facts">
+    <section v-if="activeView === 'dashboard'" class="facts">
       <h2>运行时</h2>
       <dl>
         <dt>应用版本</dt>
