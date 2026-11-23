@@ -1832,7 +1832,25 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 
 新增 3 个：证据/知识分离+引用、项目隔离、无命中降级。Python **499 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-23 · RI-6：桌面端页面骨架（第一批）
+
+基线 `7f841ac`；分支 `feature/ri-6-desktop`。
+
+### 已实现
+
+- `App.vue` 增加六个视图切换：总览/简历/GitHub/代码分析/知识库/设置。
+- 总览保留 Core/音频状态；简历页保留上传/项目编辑；其余为明确占位，不伪造功能。
+- 未新增 IPC、未改 preload 白名单、未引入路由依赖。
+- typecheck 通过；桌面测试 **11 passed**。
+
+### 未实现
+
+- GitHub/Analysis/Knowledge/Settings 的真实交互与 IPC。
+- 悬浮窗、实时转写/问题/答案展示。
+- 页面组件拆分；当前仍在 App.vue。
+
 ### 变更记录
+
 
 
 

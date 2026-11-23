@@ -186,3 +186,9 @@ dd {
 .muted { color: #9ca3af; font-size: 12px; }
 .empty, .resume-error { color: #f59e0b; font-size: 13px; }
 button.danger { border-color: #7f1d1d; color: #fca5a5; }
+
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.tabs button { background: #15171c; color: #cbd5e1; border: 1px solid #333842; border-radius: 6px; padding: 6px 10px; }
+.tabs button.active { border-color: #3b82f6; color: #fff; }
+.placeholder { border: 1px dashed #333842; border-radius: 8px; padding: 16px; margin-top: 12px; color: #9ca3af; }
