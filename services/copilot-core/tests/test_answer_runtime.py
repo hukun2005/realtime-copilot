@@ -155,3 +155,29 @@ async def test_cancel_session_and_cleanup() -> None:
     assert runtime.cleanup(keep=0) >= 1
     assert runtime.status(second) is None
 
+
+
+async def test_rejected_review_does_not_call_provider() -> None:
+    from copilot_core.answering.review import ReviewService
+
+    async def reject(text, detection, recent):
+        return {"decision": "rejected", "confidence": 0.9, "question_type": "statement", "reason": "no", "normalized_question": text}
+
+    recorded: list[str] = []
+
+    class Provider:
+        async def stream(self, *, question, context):
+            recorded.append("called")
+            yield "x"
+
+    recorder = Recorder()
+    runtime = AnswerRuntime(
+        provider=Provider(),
+        publish=recorder.publish,
+        reviewer=ReviewService(call=reject),
+    )
+    request_id = await runtime.submit_question(question(), session_id="s1")
+    await wait(runtime, request_id, recorder.terminal)
+    assert runtime.status(request_id)["state"] == "cancelled"
+    assert recorder.events[-1].payload["reason"] == "review_rejected"
+    assert recorded == []

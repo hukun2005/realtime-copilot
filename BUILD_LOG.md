@@ -1884,7 +1884,16 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
   跨来源允许、runtime 故障不破坏检测。
 - 全量 510 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P51-03：结构化 Review
+
+- 新增 `answering/review.py`：ReviewStatus(confirmed/rejected/uncertain/unavailable)、Pydantic ReviewOutcome。
+- ReviewService：超时/异常/坏 JSON → unavailable 降级为规则结果；rejected 阻止 Answer；uncertain 按规则置信度。
+- `deepseek_review_call(client.complete)` 复用现有 DeepSeekClient，不新建客户端；Key 不进 Prompt/日志。
+- AnswerRuntime 可选 reviewer：rejected 只发 answer.cancelled(review_rejected)，不调用 provider。
+- 测试 6 个 Review + 1 个 runtime gate；全量 517 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 
