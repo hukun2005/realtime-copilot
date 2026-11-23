@@ -1861,6 +1861,9 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 
 ## 2026-11-23 · P51-01：Answer Runtime
 
+**回归修复**：仓库已有 `copilot_core/runtime.py` 启动模块；Answer Runtime 不能占用 `runtime/`。
+已改名为 `copilot_core/answering/`，恢复 `python -m copilot_core` 与本地 E2E。
+
 基线 `76d9c7e`；分支 `feature/p5-realtime-answer-runtime`。
 
 - 新增 `runtime/`：AnswerTask、RuntimeEvent、AnswerRuntime。

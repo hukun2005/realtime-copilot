@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+from copilot_core.answering import AnswerRuntime, RuntimeEvent
 from copilot_core.detection import QuestionEngine
-from copilot_core.runtime import AnswerRuntime, RuntimeEvent
 
 
 class FakeProvider:

@@ -2,7 +2,7 @@
 
 ## 已实现
 
-`copilot_core/runtime/`：
+`copilot_core/answering/`：
 - `AnswerTask`：request_id/session/question/generation/state/sequence/text。
 - `RuntimeEvent`：内部事件（P52 再映射统一协议）。
 - `AnswerRuntime`：
