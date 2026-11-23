@@ -1957,7 +1957,18 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - **未完成**：EventConnection session 订阅/WS 泵、认证订阅、重连/重放。
 - 全量 540 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P52-04：WS 订阅与 AnswerStack 装配
+
+- Schema 新增 answer.subscribe/unsubscribe（requestId+sessionId）。
+- EventConnection：ui/bridge 可订阅当前 active session；pump 将 RuntimeEvent 映射协议事件发送；
+  断开/退订取消订阅与 pump；非 active session 拒绝。
+- app 创建 AnswerEventPublisher；有 DEEPSEEK_API_KEY 时装配 build_answer_stack，
+  answer_runtime 接入 asr_events；shutdown 关闭 stack。
+- 新增协议映射测试；全量 544 passed / 3 skipped。
+- **未完成**：WS 重连/sequence 去重/快照、订阅集成测试、P52-05 前端。
+
 ### 变更记录
+
 
 
 

@@ -105,7 +105,9 @@ def test_envelope_is_uniform_across_events() -> None:
     answer_types = {"answer.started", "answer.delta", "answer.completed", "answer.cancelled", "answer.failed"}
     for name, spec in defs.items():
         event_type = spec["properties"]["type"].get("const", "")
-        if event_type in answer_types:
+        if event_type in {"answer.subscribe", "answer.unsubscribe"}:
+            assert spec["required"] == ["v", "type", "eventId", "requestId", "ts", "payload"], name
+        elif event_type in answer_types:
             assert spec["required"] == [
                 "v", "type", "eventId", "requestId", "sessionId",
                 "questionId", "generation", "sequence", "ts", "payload",

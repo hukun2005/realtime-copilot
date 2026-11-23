@@ -19,6 +19,8 @@ from .models import (
     AnswerDeltaEvent,
     AnswerFailedEvent,
     AnswerStartedEvent,
+    AnswerSubscribeEvent,
+    AnswerUnsubscribeEvent,
     AsrErrorEvent,
     AsrFinalEvent,
     AsrPartialEvent,
@@ -61,6 +63,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "answer.completed",
     "answer.cancelled",
     "answer.failed",
+    "answer.subscribe",
+    "answer.unsubscribe",
 )
 
 ConcreteEvent: TypeAlias = (
@@ -77,6 +81,8 @@ ConcreteEvent: TypeAlias = (
     | AnswerCompletedEvent
     | AnswerCancelledEvent
     | AnswerFailedEvent
+    | AnswerSubscribeEvent
+    | AnswerUnsubscribeEvent
 )
 
 

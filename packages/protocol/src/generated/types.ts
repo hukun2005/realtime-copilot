@@ -28,6 +28,8 @@ export type EventV1 =
   | AnswerCompletedEvent
   | AnswerCancelledEvent
   | AnswerFailedEvent
+  | AnswerSubscribeEvent
+  | AnswerUnsubscribeEvent
 /**
  * 事件唯一标识；由发送方生成，接收方只用于日志与关联，不承担幂等语义。
  */
@@ -416,4 +418,26 @@ export interface AnswerFailedPayload {
   code: string
   message: string
   retryable: boolean
+}
+export interface AnswerSubscribeEvent {
+  v: 1
+  type: 'answer.subscribe'
+  eventId: EventId
+  requestId: RequestId
+  ts: number
+  payload: AnswerSubscribePayload
+}
+export interface AnswerSubscribePayload {
+  sessionId: SessionId
+}
+export interface AnswerUnsubscribeEvent {
+  v: 1
+  type: 'answer.unsubscribe'
+  eventId: EventId
+  requestId: RequestId
+  ts: number
+  payload: AnswerUnsubscribePayload
+}
+export interface AnswerUnsubscribePayload {
+  sessionId: SessionId
 }

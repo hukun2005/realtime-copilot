@@ -36,6 +36,8 @@ export const EVENT_TYPES = [
   'answer.completed',
   'answer.cancelled',
   'answer.failed',
+  'answer.subscribe',
+  'answer.unsubscribe',
 ] as const
 
 /** 事件类型别名。 */
