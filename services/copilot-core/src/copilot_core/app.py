@@ -26,8 +26,10 @@ from .audio import AudioHub
 from .capture import CaptureController
 from .config import AppConfig
 from .detection import QuestionEngine
+from .knowledge import KnowledgeStore
 from .logging_setup import get_logger
 from .memory import process_memory
+from .rag import build_rag_context
 from .resume import ResumeFileError, ResumeProjectUpdate, ResumeStore, ingest_resume, sanitize_filename
 from .security import build_runtime_info, remove_runtime_file, write_runtime_file
 from .storage import close, open_database
@@ -274,6 +276,42 @@ def create_app(
     async def require_resume_token(x_copilot_token: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_copilot_token, token):
             raise HTTPException(status_code=401, detail="unauthorized")
+
+    @app.get("/api/knowledge/search")
+    def search_knowledge(
+        q: str,
+        project_id: str | None = None,
+        source_type: str | None = None,
+        limit: int = 10,
+        _: None = Depends(require_resume_token),
+    ) -> list[dict[str, Any]]:
+        return KnowledgeStore(app.state.db).search(
+            q, project_id=project_id, source_type=source_type, limit=min(limit, 50)
+        )
+
+    @app.post("/api/rag/context")
+    def rag_context(
+        payload: dict[str, Any],
+        _: None = Depends(require_resume_token),
+    ) -> dict[str, Any]:
+        text = str(payload.get("question") or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="question_required")
+        engine = QuestionEngine(generation=1)
+        question, detection = engine.submit_text(text)
+        rag = build_rag_context(
+            query=text,
+            store=KnowledgeStore(app.state.db),
+            project_id=payload.get("projectId") or None,
+        )
+        return {
+            "detected": bool(detection and detection.is_question),
+            "projectEvidence": rag.project_evidence,
+            "technicalKnowledge": rag.technical_knowledge,
+            "citations": rag.citations,
+            "missing": rag.missing,
+            "questionId": question.id if question else None,
+        }
 
     @app.get("/api/resumes")
     def list_resumes(_: None = Depends(require_resume_token)) -> list[dict[str, Any]]:
