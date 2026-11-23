@@ -1892,7 +1892,18 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - AnswerRuntime 可选 reviewer：rejected 只发 answer.cancelled(review_rejected)，不调用 provider。
 - 测试 6 个 Review + 1 个 runtime gate；全量 517 passed / 3 skipped；ruff 通过。
 
+## 2026-11-23 · P51-04：RAG 自动检索
+
+- `RagContextBuilder`：复用 build_rag_context，项目证据/通用知识/citations/missing 注入 AnswerContext。
+- 长问句检索无命中时按英文/中文关键词回退（如 Pinia）。
+- 检索异常 → `missing=("rag_failed",)`，任务继续，不崩溃。
+- AnswerContext 增加 request_id/recent_transcript/citations/missing。
+- Runtime context_factory 兼容同步/异步构建器。
+- 测试 4 个：分离+引用、无命中、数据库异常降级、runtime 注入。
+- 全量 521 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 
