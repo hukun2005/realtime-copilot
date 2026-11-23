@@ -5,10 +5,12 @@ from .events import RuntimeEvent
 from .factory import AnswerStack, build_answer_stack
 from .ingest import FinalGuard, is_meaningful
 from .models import AnswerTask, TaskState
+from .publisher import AnswerEventPublisher, Subscription
 from .rag import RagContextBuilder
 from .review import ReviewOutcome, ReviewService, ReviewStatus, deepseek_review_call
 
 __all__ = [
+    "AnswerEventPublisher",
     "AnswerRuntime",
     "AnswerStack",
     "AnswerTask",
@@ -20,6 +22,7 @@ __all__ = [
     "ReviewStatus",
     "RuntimeEvent",
     "StreamProvider",
+    "Subscription",
     "TaskState",
     "build_answer_stack",
     "deepseek_review_call",
