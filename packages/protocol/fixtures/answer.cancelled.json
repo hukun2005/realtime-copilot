@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "sessionId": "sess_01JAY0000000000000000001",
+  "requestId": "req_01JAY0000000000000000001",
+  "questionId": "q_01JAY0000000000000000001",
+  "generation": 2,
+  "ts": 1763700003000,
+  "type": "answer.cancelled",
+  "sequence": 4,
+  "payload": {
+    "reason": "superseded"
+  },
+  "eventId": "evt_answer_cancelled_0001"
+}

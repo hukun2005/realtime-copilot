@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "sessionId": "sess_01JAY0000000000000000001",
+  "requestId": "req_01JAY0000000000000000001",
+  "questionId": "q_01JAY0000000000000000001",
+  "generation": 2,
+  "ts": 1763700003000,
+  "type": "answer.failed",
+  "sequence": 4,
+  "payload": {
+    "code": "deepseek_timeout",
+    "message": "模型请求超时",
+    "retryable": true
+  },
+  "eventId": "evt_answer_failed_0001"
+}

@@ -1916,7 +1916,27 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - P52 Schema/WS/前端未做。
 - 真实 DeepSeek 全栈冒烟未运行。
 
+## 2026-11-23 · P52-01：统一 answer 事件 Schema
+
+- 扩展唯一事实源 `packages/protocol/schema/events.v1.json`，新增 5 类：
+  answer.started/delta/completed/cancelled/failed。
+- 公共字段沿用现有信封 v/eventId/ts/requestId，新增 answer 专用
+  sessionId/questionId/generation/sequence；时间沿用 ts（毫秒）。
+- payload：started(question/questionType/status)、delta(delta)、
+  completed(answer/finishReason/usage)、cancelled(reason 枚举)、failed(code/message/retryable)。
+- 重新生成 Python Pydantic 与 TS 类型；新增 5 个 fixtures；更新 EVENT_TYPES。
+- 信封一致性测试改为：answer 事件允许并强制额外公共字段，普通事件保持原样。
+- 未新增第二套协议源；未改 C#/WS/前端。
+
+### 结果
+- Python 协议 49 passed；TS 33 passed。
+- 全量 533 passed / 3 skipped；ruff 通过。
+
+### 未完成
+- P52-02 双端消费/C# 同步、P52-03 Publisher、P52-04 WS、P52-05 前端。
+
 ### 变更记录
+
 
 
 

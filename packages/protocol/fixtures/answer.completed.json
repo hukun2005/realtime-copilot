@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "sessionId": "sess_01JAY0000000000000000001",
+  "requestId": "req_01JAY0000000000000000001",
+  "questionId": "q_01JAY0000000000000000001",
+  "generation": 2,
+  "ts": 1763700003000,
+  "type": "answer.completed",
+  "sequence": 3,
+  "payload": {
+    "answer": "Vue3 使用 Proxy 实现响应式。",
+    "finishReason": "stop",
+    "usage": {
+      "promptTokens": 100,
+      "completionTokens": 20
+    }
+  },
+  "eventId": "evt_answer_completed_0001"
+}

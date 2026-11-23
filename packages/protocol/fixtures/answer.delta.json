@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "sessionId": "sess_01JAY0000000000000000001",
+  "requestId": "req_01JAY0000000000000000001",
+  "questionId": "q_01JAY0000000000000000001",
+  "generation": 2,
+  "ts": 1763700003000,
+  "type": "answer.delta",
+  "sequence": 2,
+  "payload": {
+    "delta": "Vue3 使用 Proxy 拦截对象访问。"
+  },
+  "eventId": "evt_answer_delta_0001"
+}
