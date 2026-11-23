@@ -152,6 +152,26 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         ON analysis_reports(repository_id, created_at DESC)
         """,
     ),
+    6: (
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks USING fts5(
+            chunk_id UNINDEXED,
+            project_id UNINDEXED,
+            repository_id UNINDEXED,
+            commit_sha UNINDEXED,
+            source_type UNINDEXED,
+            file_path UNINDEXED,
+            language UNINDEXED,
+            symbol_name UNINDEXED,
+            start_line UNINDEXED,
+            end_line UNINDEXED,
+            content,
+            content_hash UNINDEXED,
+            embedding_status UNINDEXED,
+            tokenize='trigram'
+        )
+        """,
+    ),
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)

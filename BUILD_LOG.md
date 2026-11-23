@@ -1786,7 +1786,32 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 新增 7 个：敏感/忽略/大小筛选、Tree/contents、文件上限、证据与 partial、
 空仓库 UNKNOWN、v5 报告版本。Python **494 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-23 · RI-4：个人项目知识库（FTS5）
+
+基线 `bdfbb60`；分支 `feature/ri-4-knowledge-base`。
+
+### 已实现
+
+- SQLite v6：FTS5 `knowledge_chunks`（trigram，支持中文子串），字段含
+  project/repository/commit/source/file/language/symbol/lines/content/hash/embedding_status。
+- 四类来源：resume、repository、analysis、technical；`source_type` 强制校验。
+- `KnowledgeStore.add` 按 chunk_id 去重；`search` 支持关键词 + project/repository/
+  commit/source 过滤，bm25 排序。
+- `chunks_from_resume` / `chunks_from_report` / `technical_chunk`；保留行号与 commit。
+- 低相关/无命中返回空，不强行塞 Prompt。
+
+### 未实现
+
+- Embedding Provider / VectorStore / Hybrid / Reranker（第二版）。
+- 检索 API、桌面知识库页、RAG AnswerContext 接入。
+- 真实仓库大索引与性能测试。
+
+### 测试
+
+新增 2 个：FTS5 搜索/过滤/去重/无命中；简历与分析块来源。Python **496 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 
