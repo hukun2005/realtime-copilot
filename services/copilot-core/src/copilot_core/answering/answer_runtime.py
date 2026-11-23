@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Protocol
@@ -103,7 +104,9 @@ class AnswerRuntime:
                     task.finish(TaskState.CANCELLED)
                     await self._emit(task, "answer.cancelled", {"reason": "review_rejected"})
                     return
-            context = await self._context_factory(task.question, project_id)
+            context = self._context_factory(task.question, project_id)
+            if inspect.isawaitable(context):
+                context = await context
             async for chunk in self._provider.stream(question=task.question, context=context):
                 if not self._is_current(task):
                     return

@@ -30,6 +30,10 @@ class AnswerContext:
     technical_knowledge: tuple[str, ...] = ()
     answer_style: str = "口语化、简洁、3-6 句"
     token_budget: int = 1200
+    request_id: str = ""
+    recent_transcript: tuple[str, ...] = ()
+    citations: tuple[dict[str, object], ...] = ()
+    missing: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
