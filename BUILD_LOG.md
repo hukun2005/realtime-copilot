@@ -1760,7 +1760,34 @@ Python **479 passed / 3 skipped**；ruff 通过。
 新增 8 个：URL、公开仓库/Token 头、401/403/404/429、候选评分理由、
 v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 
+## 2026-11-23 · RI-3：仓库静态分析（核心）
+
+基线 `6032901`；分支 `feature/ri-3-code-analysis`。
+
+### 已实现
+
+- GitHub Tree API（recursive）与 contents 读取；truncated 透传。
+- 文件筛选：忽略 node_modules/dist/build/.venv 等；排除 .env/私钥/证书/数据库；
+  200 文件、200 KB 上限；按 manifest/入口/源码/测试优先级排序。
+- 静态符号：Python、TS/JS、C#、Vue、JSON/Markdown；类/函数/方法/Store/路由。
+- 证据化报告：repository、commit_sha、file_path、start_line、end_line、summary；
+  无证据结论标 UNKNOWN/INFERENCE；partial 标记。
+- SQLite v5：repository_snapshots、analysis_reports；按 commit 版本化，保留历史。
+
+### 未实现
+
+- 未接 app API/桌面“项目分析”页。
+- 未做完整 AST/调用图/依赖图；JS/C# 仍是行级正则。
+- 未做真实 GitHub Tree/大仓库 LIVE 验证；仅 MockTransport。
+- 未做 RI-3 报告 UI 与“重新分析”按钮。
+
+### 测试
+
+新增 7 个：敏感/忽略/大小筛选、Tree/contents、文件上限、证据与 partial、
+空仓库 UNKNOWN、v5 报告版本。Python **494 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

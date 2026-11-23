@@ -126,6 +126,32 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         )
         """,
     ),
+    5: (
+        """
+        CREATE TABLE IF NOT EXISTS repository_snapshots (
+            repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            commit_sha TEXT NOT NULL,
+            partial INTEGER NOT NULL DEFAULT 0,
+            file_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY(repository_id, commit_sha)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS analysis_reports (
+            id TEXT PRIMARY KEY,
+            repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            commit_sha TEXT NOT NULL,
+            analysis_version TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_analysis_reports_repo
+        ON analysis_reports(repository_id, created_at DESC)
+        """,
+    ),
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)
