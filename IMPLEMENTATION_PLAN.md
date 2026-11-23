@@ -254,6 +254,7 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P5 流式 | DeepSeek SSE stream、AnswerContext、AnswerTaskManager、取消/抢占、真实冒烟 |
 | RI-1 简历 | PDF/DOCX 安全解析、规则项目提取、SQLite v3、简历 API、最小桌面 UI |
 | RI-2 GitHub | 公开仓库读取、候选匹配、v4 存储；OAuth/PAT UI 未做 |
+| RI-5 RAG | 项目证据/通用知识分离、引用、长度预算、无命中降级；编排/API/UI 未做 |
 | RI-4 知识库 | FTS5 四类来源、过滤、去重；向量/Hybrid 未做 |
 | RI-3 代码分析 | Tree 扫描、敏感排除、静态符号、证据报告、v5 版本；UI/API 未做 |
 

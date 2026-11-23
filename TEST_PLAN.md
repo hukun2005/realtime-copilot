@@ -515,3 +515,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 来源 | resume/repository/analysis/technical 隔离 |
 | 过滤 | project/repository/commit/source |
 | 去重 | chunk_id 重复不插入；保留行号/commit |
+
+
+### RI-5 RAG
+
+| 类别 | 断言 |
+|---|---|
+| 分离 | project_evidence 与 technical_knowledge 不同字段 |
+| 引用 | chunk/repo/commit/file/start/end/symbol 真实 |
+| 过滤 | 只检索指定项目 |
+| 降级 | 无命中 missing，不伪造证据 |
