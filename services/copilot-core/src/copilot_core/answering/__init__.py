@@ -2,6 +2,7 @@
 
 from .answer_runtime import AnswerRuntime, EventPublisher, StreamProvider
 from .events import RuntimeEvent
+from .factory import AnswerStack, build_answer_stack
 from .ingest import FinalGuard, is_meaningful
 from .models import AnswerTask, TaskState
 from .rag import RagContextBuilder
@@ -9,6 +10,7 @@ from .review import ReviewOutcome, ReviewService, ReviewStatus, deepseek_review_
 
 __all__ = [
     "AnswerRuntime",
+    "AnswerStack",
     "AnswerTask",
     "EventPublisher",
     "FinalGuard",
@@ -19,6 +21,7 @@ __all__ = [
     "RuntimeEvent",
     "StreamProvider",
     "TaskState",
+    "build_answer_stack",
     "deepseek_review_call",
     "is_meaningful",
 ]

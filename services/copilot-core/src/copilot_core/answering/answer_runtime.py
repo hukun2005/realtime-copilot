@@ -196,6 +196,15 @@ class AnswerRuntime:
             self._question_requests.pop((task.session_id, task.question.id), None)
         return len(remove)
 
+    async def close(self) -> None:
+        for session_id in list(self._session_active):
+            await self.cancel_session(session_id)
+        for handle in list(self._handles.values()):
+            if not handle.done():
+                handle.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await handle
+
     def _is_current(self, task: AnswerTask) -> bool:
         return self._session_active.get(task.session_id) == task.request_id and self._generations.get(
             task.session_id
