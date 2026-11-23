@@ -495,3 +495,13 @@ Windows 专属测试（L2 的 WASAPI 部分、L4 的 UI）只在 Windows runner 
 | 错误 | 401/403/404/429、超时/网络 |
 | 匹配 | 名称/技术栈/描述/近期推送加权，理由可解释 |
 | 存储 | v4 迁移、upsert、关联状态、Token 不落库 |
+
+
+### RI-3 代码分析
+
+| 类别 | 断言 |
+|---|---|
+| 扫描 | Tree、truncated、忽略目录、敏感文件、大小/数量上限 |
+| 符号 | Python/TS/JS/C#/Vue、路由、Store、模型 |
+| 证据 | repo/commit/file/start/end/summary；UNKNOWN/INFERENCE |
+| 版本 | v5 快照/报告按 commit 保存，不覆盖历史 |

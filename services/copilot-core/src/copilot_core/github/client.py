@@ -6,6 +6,7 @@ Token 不落库、不写日志。
 
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -84,6 +85,43 @@ class GitHubClient:
             if len(data) < per_page:
                 break
         return repos
+
+    async def get_tree(self, owner: str, repo: str, ref: str) -> tuple[list[dict[str, object]], bool]:
+        data = await self._get(f"/repos/{owner}/{repo}/git/trees/{ref}", params={"recursive": "1"})
+        if not isinstance(data, dict):
+            raise GitHubError("invalid_response")
+        tree = data.get("tree")
+        if not isinstance(tree, list):
+            raise GitHubError("invalid_response")
+        return [item for item in tree if isinstance(item, dict)], bool(data.get("truncated", False))
+
+    async def get_file_text(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str,
+        *,
+        max_bytes: int = 200_000,
+    ) -> str | None:
+        data = await self._get(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": ref})
+        if not isinstance(data, dict) or data.get("type") != "file":
+            return None
+        if int(data.get("size") or 0) > max_bytes:
+            return None
+        encoded = data.get("content")
+        if not isinstance(encoded, str):
+            return None
+        try:
+            raw = base64.b64decode(encoded, validate=False)
+        except Exception as error:
+            raise GitHubError("invalid_content") from error
+        if len(raw) > max_bytes:
+            return None
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
 
     async def _get(self, path: str, params: dict[str, object] | None = None) -> object:
         try:

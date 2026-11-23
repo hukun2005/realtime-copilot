@@ -29,6 +29,7 @@ Windows 实时 AI 会议助手：采集电脑输出音频（可选麦克风）�
 | ASR 运行时（Manager/协调器/广播） | 已实现，Mock 测试通过 |
 | 转写装配 / 缓冲 / SQLite 持久化 | **已实现**（P3.4；真实 WASAPI + Paraformer 2 分钟链路 PASS） |
 | 问题检测引擎（P4） | **已实现**：规则检测/分类/追问/状态机；人工标注集评测通过，非真实会议 |
+| 代码分析（RI-3） | **核心已实现**：Tree 扫描、敏感排除、静态符号、证据报告、v5 版本；UI/API 未做 |
 | GitHub 关联（RI-2） | **核心已实现**：公开仓库读取、候选匹配、v4 状态存储；OAuth/PAT UI 未做 |
 | 简历解析（RI-1） | **后端/API/最小桌面 UI 已实现**；规则项目提取；未做 LLM 抽取 |
 | LLM Review / 问答 | DeepSeek 真实 Review/非流式 Answer PASS；**流式 SSE + 取消已实现**；未接 UI/协议 |
