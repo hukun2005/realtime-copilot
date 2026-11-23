@@ -1942,7 +1942,16 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - C# 仅发送音频帧，不消费 JSON 事件，无需 DTO 同步；已确认不新增 C# 模型。
 - Python 协议 51 passed；TS 类型检查通过。
 
+## 2026-11-23 · P52-03：答案事件 Publisher
+
+- 新增 `answering/publisher.py`：session 独立订阅、有界 asyncio.Queue、非阻塞 publish。
+- delta 满队列淘汰最旧 delta；终态优先保留，只有全是终态时才 overflow 计数。
+- unsubscribe 关闭队列；每个订阅者独立计数 dropped_delta。
+- 测试 4 个：隔离、终态保留、退订、慢订阅者不阻塞。
+- 全量 539 passed / 3 skipped；ruff 通过。
+
 ### 变更记录
+
 
 
 
