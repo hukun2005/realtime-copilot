@@ -99,6 +99,33 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
         ON resume_projects(resume_id)
         """,
     ),
+    4: (
+        """
+        CREATE TABLE IF NOT EXISTS repositories (
+            id TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL UNIQUE,
+            private INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL DEFAULT '',
+            language TEXT,
+            html_url TEXT NOT NULL,
+            default_branch TEXT NOT NULL,
+            pushed_at TEXT,
+            commit_sha TEXT,
+            updated_at INTEGER NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS project_repositories (
+            project_id TEXT NOT NULL REFERENCES resume_projects(id) ON DELETE CASCADE,
+            repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+            state TEXT NOT NULL DEFAULT 'DISCOVERED',
+            score REAL NOT NULL DEFAULT 0,
+            reason TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(project_id, repository_id)
+        )
+        """,
+    ),
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)

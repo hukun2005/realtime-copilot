@@ -1732,7 +1732,36 @@ Python **479 passed / 3 skipped**；ruff 通过。
 - 未做 LLM 结构化抽取与 Pydantic 二次校验。
 - 未做真实个人简历本地验证（只用合成 fixture）。
 
+## 2026-11-22 · RI-2：GitHub 仓库关联（核心）
+
+基线 `106ba14`；分支 `feature/ri-2-github-link`。
+
+### 已实现
+
+- `github/client.py`：公开仓库读取（`/repos`、`/user/repos` 分页）、可选 Token、
+  401/403/404/429/超时/网络错误；Token 不写日志。
+- 简历 GitHub URL 解析（owner/repo）。
+- 候选匹配：名称词、语言/技术栈、描述、最近推送的显式加权；每条候选带 reasons；
+  分数只用于排序，不自动认定归属。
+- SQLite v4：`repositories`、`project_repositories`；状态
+  DISCOVERED/MATCHED/CONFIRMED/REJECTED/ANALYZING/READY/STALE/ERROR。
+- `GitHubStore`：upsert、link、set_state、links。
+
+### 未实现
+
+- GitHub App / OAuth 授权全流程；当前只有公开仓库 + 可选 PAT（未接 UI）。
+- Token 的 DPAPI/safeStorage 存储与撤销 UI。
+- 候选确认/拒绝的桌面 UI 与 API。
+- 私有仓库真实授权验证。
+- 未接 Tree API/代码分析（RI-3）。
+
+### 测试
+
+新增 8 个：URL、公开仓库/Token 头、401/403/404/429、候选评分理由、
+v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
+
 ### 变更记录
+
 
 
 

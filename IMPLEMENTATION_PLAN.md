@@ -252,7 +252,8 @@ pwsh -File scripts/e2e-audio.ps1 -Seconds 60 -DropEvery 500
 | P4 问题检测 | 转写管理、规则分类、追问关联、状态机、手动入口、人工标注评测 |
 | P4 补充 | LLM Review / Answer 可插拔接口；真实模型未接入 |
 | P5 流式 | DeepSeek SSE stream、AnswerContext、AnswerTaskManager、取消/抢占、真实冒烟 |
-| RI-1 简历 | PDF/DOCX 安全解析、规则项目提取、SQLite v3、简历 API；UI 未做 |
+| RI-1 简历 | PDF/DOCX 安全解析、规则项目提取、SQLite v3、简历 API、最小桌面 UI |
+| RI-2 GitHub | 公开仓库读取、候选匹配、v4 存储；OAuth/PAT UI 未做 |
 
 **未完成**
 
