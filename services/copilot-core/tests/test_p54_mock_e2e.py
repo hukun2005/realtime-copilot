@@ -9,6 +9,8 @@ import websockets
 from copilot_core.answering import RuntimeEvent
 from support import hello_event, recv_until
 
+from copilot_protocol import make_event
+
 
 async def recv_type(socket, expected: str, *, limit: int = 20) -> dict:
     seen = []
@@ -20,7 +22,6 @@ async def recv_type(socket, expected: str, *, limit: int = 20) -> dict:
             return message
     raise AssertionError(f"did not receive {expected}; seen={seen}")
 
-from copilot_protocol import make_event
 
 SESSION = "sess_standalone"
 
