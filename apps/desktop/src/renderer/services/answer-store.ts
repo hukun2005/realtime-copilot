@@ -14,7 +14,7 @@ export interface AnswerEventLike {
   questionId: string
   generation: number
   sequence: number
-  payload: Record<string, unknown>
+  payload: unknown
 }
 
 export interface AnswerRequestState {
@@ -85,12 +85,13 @@ export class AnswerStore {
     session.currentRequestId = event.requestId
     session.state = 'running'
 
+    const payload = (event.payload ?? {}) as Record<string, unknown>
     if (event.type === 'answer.delta') {
-      request.text += String(event.payload.delta ?? '')
+      request.text += String(payload.delta ?? '')
       return true
     }
     if (event.type === 'answer.completed') {
-      request.text = String(event.payload.answer ?? request.text)
+      request.text = String(payload.answer ?? request.text)
       this.finish(session, request, 'completed')
       return true
     }

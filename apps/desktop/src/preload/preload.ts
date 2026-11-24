@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { CopilotBridge, ResumeProjectPatch } from '../shared/bridge'
+import type { AnswerEvent, CopilotBridge, ResumeProjectPatch } from '../shared/bridge'
 import type { CoreStatus } from '../shared/status'
 
 /**
@@ -19,6 +19,15 @@ const bridge: CopilotBridge = {
     ipcRenderer.invoke('copilot:resume-delete', id) as ReturnType<CopilotBridge['deleteResume']>,
   updateResumeProject: (id: string, patch: ResumeProjectPatch) =>
     ipcRenderer.invoke('copilot:resume-project-update', id, patch) as ReturnType<CopilotBridge['updateResumeProject']>,
+  onAnswerEvent: (listener: (event: AnswerEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, answer: AnswerEvent): void => {
+      listener(answer)
+    }
+    ipcRenderer.on('copilot:answer-event', handler)
+    return () => {
+      ipcRenderer.removeListener('copilot:answer-event', handler)
+    }
+  },
   onCoreStatus: (listener: (status: CoreStatus) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: CoreStatus): void => {
       listener(status)

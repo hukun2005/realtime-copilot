@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
-import type { ResumeProjectPatch, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerEvent, ResumeProjectPatch, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
 
@@ -25,6 +25,7 @@ let mainWindow: BrowserWindow | null = null
 let runtime: RuntimeFile | null = null
 let rendererLoaded = false
 let smokeFinished = false
+let unsubscribeAnswer: (() => void) | null = null
 
 function summarizeRuntime(): RuntimeSummary {
   return {
@@ -213,6 +214,9 @@ void app.whenReady().then(async () => {
     void maybeFinishSmoke()
   })
 
+  unsubscribeAnswer = connection.onAnswerEvent((event) => {
+    mainWindow?.webContents.send('copilot:answer-event', event)
+  })
   connection.onChange((status) => {
     mainWindow?.webContents.send('copilot:core-status', status)
     void maybeFinishSmoke()
@@ -223,6 +227,8 @@ void app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  unsubscribeAnswer?.()
+  unsubscribeAnswer = null
   connection.disconnect()
   app.quit()
 })

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { DesktopSnapshot } from '../shared/status'
-import type { ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerEvent, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import { AnswerStore, type AnswerSessionState } from './services/answer-store'
 
 const snapshot = ref<DesktopSnapshot | null>(null)
 const error = ref<string | null>(null)
@@ -19,6 +20,9 @@ const resumes = ref<ResumeRecord[]>([])
 const resumeError = ref<string | null>(null)
 const uploading = ref(false)
 const edits = ref<Record<string, { tech: string; github: string }>>({})
+const answerStore = new AnswerStore()
+const answerView = ref<AnswerSessionState | null>(null)
+let unsubscribeAnswer: (() => void) | undefined
 let refreshTimer: number | undefined
 let unsubscribe: (() => void) | undefined
 
@@ -157,6 +161,10 @@ onMounted(async () => {
       snapshot.value.core = status
     }
   })
+  unsubscribeAnswer = window.copilot.onAnswerEvent((event: AnswerEvent) => {
+    answerStore.apply(event)
+    answerView.value = answerStore.session(event.sessionId)
+  })
   await refresh()
   await loadResumes()
   refreshTimer = window.setInterval(() => {
@@ -169,6 +177,7 @@ onUnmounted(() => {
     window.clearInterval(refreshTimer)
   }
   unsubscribe?.()
+  unsubscribeAnswer?.()
 })
 </script>
 
@@ -252,6 +261,13 @@ onUnmounted(() => {
       <p v-else-if="activeView === 'analysis'">代码分析页面将在后续批次接入；当前后端已完成 Tree/静态分析。</p>
       <p v-else-if="activeView === 'knowledge'">知识库检索页面将在后续批次接入；当前 FTS5 已完成。</p>
       <p v-else>面试设置与悬浮窗将在后续批次接入。</p>
+    </section>
+
+    <section v-if="activeView === 'dashboard'" class="answer-panel">
+      <h2>AI 实时回答</h2>
+      <p class="muted">状态：{{ answerView?.state ?? 'idle' }}</p>
+      <pre class="answer-text">{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.text ?? '等待问题…' }}</pre>
+      <button type="button" @click="answerView = null">清空显示</button>
     </section>
 
     <section v-if="activeView === 'dashboard' && problems.length > 0" class="problems">
