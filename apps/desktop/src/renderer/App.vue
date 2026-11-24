@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { DesktopSnapshot } from '../shared/status'
-import type { AnswerEvent, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerEvent, ResumeProjectRecord, ResumeRecord, TranscriptEvent } from '../shared/bridge'
 import { AnswerStore, type AnswerSessionState } from './services/answer-store'
 
 const snapshot = ref<DesktopSnapshot | null>(null)
@@ -22,6 +22,10 @@ const uploading = ref(false)
 const edits = ref<Record<string, { tech: string; github: string }>>({})
 const answerStore = new AnswerStore()
 const answerView = ref<AnswerSessionState | null>(null)
+const transcripts = ref<TranscriptEvent[]>([])
+const micEnabled = ref(false)
+const captureError = ref<string | null>(null)
+let unsubscribeTranscript: (() => void) | undefined
 let unsubscribeAnswer: (() => void) | undefined
 let refreshTimer: number | undefined
 let unsubscribe: (() => void) | undefined
@@ -80,6 +84,35 @@ async function refresh(): Promise<void> {
   }
 }
 
+
+
+async function startCapture(): Promise<void> {
+  captureError.value = null
+  try {
+    await window.copilot.startCapture({ loopback: true, mic: micEnabled.value })
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function stopCapture(): Promise<void> {
+  captureError.value = null
+  try {
+    await window.copilot.stopCapture()
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function cancelAnswer(): Promise<void> {
+  const requestId = answerView.value?.currentRequestId
+  if (!requestId) return
+  try {
+    await window.copilot.cancelAnswer(requestId)
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
 
 async function loadResumes(): Promise<void> {
   try {
@@ -161,6 +194,9 @@ onMounted(async () => {
       snapshot.value.core = status
     }
   })
+  unsubscribeTranscript = window.copilot.onTranscriptEvent((event) => {
+    transcripts.value = [...transcripts.value.slice(-49), event]
+  })
   unsubscribeAnswer = window.copilot.onAnswerEvent((event: AnswerEvent) => {
     answerStore.apply(event)
     answerView.value = answerStore.session(event.sessionId)
@@ -178,6 +214,7 @@ onUnmounted(() => {
   }
   unsubscribe?.()
   unsubscribeAnswer?.()
+  unsubscribeTranscript?.()
 })
 </script>
 
@@ -263,10 +300,28 @@ onUnmounted(() => {
       <p v-else>面试设置与悬浮窗将在后续批次接入。</p>
     </section>
 
+    <section v-if="activeView === 'dashboard'" class="capture-panel">
+      <h2>音频采集</h2>
+      <label><input v-model="micEnabled" type="checkbox" /> 同时采集麦克风</label>
+      <div class="capture-actions">
+        <button type="button" @click="startCapture">开始采集</button>
+        <button type="button" @click="stopCapture">停止采集</button>
+      </div>
+      <p v-if="captureError" class="resume-error">{{ captureError }}</p>
+      <ul class="transcript-list">
+        <li v-for="(item, index) in transcripts" :key="index" :data-final="item.isFinal">
+          <span class="muted">{{ item.source }} · {{ item.isFinal ? 'final' : 'partial' }}</span>
+          {{ item.text }}
+        </li>
+      </ul>
+    </section>
+
     <section v-if="activeView === 'dashboard'" class="answer-panel">
       <h2>AI 实时回答</h2>
       <p class="muted">状态：{{ answerView?.state ?? 'idle' }}</p>
-      <pre class="answer-text">{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.text ?? '等待问题…' }}</pre>
+      <p><strong>问题：</strong>{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.question || '等待问题…' }}</p>
+      <pre class="answer-text">{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.text ?? '等待回答…' }}</pre>
+      <button type="button" :disabled="!answerView?.currentRequestId" @click="cancelAnswer">停止生成</button>
       <button type="button" @click="answerView = null">清空显示</button>
     </section>
 

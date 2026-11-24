@@ -1982,7 +1982,18 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - Mock 集成：ASR→QuestionEngine→Runtime、RAG、SSE 栈、Publisher、WS 订阅均有测试。
 - 真实 DeepSeek→WS 端到端：**NOT_RUN**。
 
+## 2026-11-24 · P54-03/04：实时 UI 与生命周期
+
+- Core 新增 `POST /api/answers/cancel`（Token），只取消指定 request。
+- on_capture_stop 先 `answer_runtime.cancel_session(handler.session_id)`，再停 ASR/transcript。
+- CoreConnection 新增 capture.start/stop、ASR partial/final 转发、transcript IPC。
+- 桌面 bridge/preload 新增 startCapture/stopCapture/cancelAnswer/onTranscriptEvent。
+- App.vue 增加音频采集（loopback + mic 开关）、实时转写、问题/答案、停止生成；AnswerStore 记录 question。
+- 测试：cancel API 3 个；桌面 19；typecheck 通过。
+- **未验证**：真实麦克风/系统音频、真实 Core+Electron 联调、DeepSeek 402 仍失败。
+
 ### 变更记录
+
 
 
 

@@ -1,6 +1,19 @@
 import type { EventOf } from '@realtime-copilot/protocol'
 import type { AudioStatus, CoreStatus, DesktopSnapshot } from './status'
 
+export interface TranscriptEvent {
+  type: 'asr.partial' | 'asr.final'
+  sessionId: string | null
+  source: string
+  text: string
+  isFinal: boolean
+}
+
+export interface CaptureOptions {
+  loopback: boolean
+  mic: boolean
+}
+
 export type AnswerEvent = EventOf<
   'answer.started' | 'answer.delta' | 'answer.completed' | 'answer.cancelled' | 'answer.failed'
 >
@@ -48,6 +61,14 @@ export interface CopilotBridge {
   onCoreStatus(listener: (status: CoreStatus) => void): () => void
   /** 订阅实时答案事件；返回取消函数。 */
   onAnswerEvent(listener: (event: AnswerEvent) => void): () => void
+  /** 订阅 ASR partial/final；返回取消函数。 */
+  onTranscriptEvent(listener: (event: TranscriptEvent) => void): () => void
+  /** 开始采集（来源由用户显式选择）。 */
+  startCapture(options: CaptureOptions): Promise<void>
+  /** 停止采集。 */
+  stopCapture(): Promise<void>
+  /** 取消一个答案请求；不影响采集。 */
+  cancelAnswer(requestId: string): Promise<boolean>
   /** 简历列表；不含 Token。 */
   resumes(): Promise<ResumeRecord[]>
   /** 上传 PDF/DOCX；只传文件名与字节，不传路径。 */

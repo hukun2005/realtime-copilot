@@ -22,6 +22,7 @@ export interface AnswerRequestState {
   questionId: string
   generation: number
   state: AnswerState
+  question: string
   text: string
   sequence: number
 }
@@ -75,6 +76,7 @@ export class AnswerStore {
         questionId: event.questionId,
         generation: event.generation,
         state: 'running',
+        question: '',
         text: '',
         sequence: 0,
       }
@@ -86,6 +88,10 @@ export class AnswerStore {
     session.state = 'running'
 
     const payload = (event.payload ?? {}) as Record<string, unknown>
+    if (event.type === 'answer.started') {
+      request.question = String(payload.question ?? '')
+      return true
+    }
     if (event.type === 'answer.delta') {
       request.text += String(payload.delta ?? '')
       return true

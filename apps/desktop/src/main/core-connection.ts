@@ -3,6 +3,7 @@ import { classifyIncoming, makeEvent } from '@realtime-copilot/protocol'
 import type { CoreStatus } from '../shared/status'
 import { INITIAL_CORE_STATUS, reduceCoreStatus, type CoreEvent } from './core-state'
 import type { RuntimeFile } from './runtime-file'
+import type { CaptureOptions, TranscriptEvent } from '../shared/bridge'
 import { AnswerEventGate, isAnswerEvent, nextReconnectDelay, type AnswerEvent } from './answer-events'
 
 const HANDSHAKE_TIMEOUT_MS = 5000
@@ -19,6 +20,7 @@ export class CoreConnection {
   private runtime: RuntimeFile | null = null
   private readonly listeners = new Set<(status: CoreStatus) => void>()
   private readonly answerListeners = new Set<(event: AnswerEvent) => void>()
+  private readonly transcriptListeners = new Set<(event: TranscriptEvent) => void>()
   private readonly answerGate = new AnswerEventGate()
   private answerSessionId: string | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -61,6 +63,26 @@ export class CoreConnection {
       if (previous) this.sendSubscribe('answer.unsubscribe', previous)
       if (sessionId) this.sendSubscribe('answer.subscribe', sessionId)
     }
+  }
+
+  onTranscriptEvent(listener: (event: TranscriptEvent) => void): () => void {
+    this.transcriptListeners.add(listener)
+    return () => {
+      this.transcriptListeners.delete(listener)
+    }
+  }
+
+  startCapture(options: CaptureOptions): void {
+    if (!this.socket || this.status.phase !== 'connected') return
+    this.socket.send(JSON.stringify(makeEvent('capture.start', {
+      loopback: { deviceId: null, processId: null },
+      mic: { enabled: options.mic, deviceId: null },
+    })))
+  }
+
+  stopCapture(): void {
+    if (!this.socket || this.status.phase !== 'connected') return
+    this.socket.send(JSON.stringify(makeEvent('capture.stop', {})))
   }
 
   getAnswerSession(): string | null {
@@ -207,6 +229,18 @@ export class CoreConnection {
         socket.close()
         return
       }
+      case 'asr.partial':
+      case 'asr.final': {
+        const update: TranscriptEvent = {
+          type: event.type,
+          sessionId: this.answerSessionId,
+          source: event.payload.source,
+          text: event.payload.text,
+          isFinal: event.type === 'asr.final',
+        }
+        for (const listener of this.transcriptListeners) listener(update)
+        return
+      }
       case 'transcript.segment':
       case 'transcript.reset': {
         if (event.payload.sessionId) this.setAnswerSession(event.payload.sessionId)
@@ -238,3 +272,4 @@ export class CoreConnection {
     }
   }
 }
+

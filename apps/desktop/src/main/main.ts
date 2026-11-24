@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
-import type { AnswerEvent, ResumeProjectPatch, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerEvent, CaptureOptions, ResumeProjectPatch, ResumeProjectRecord, ResumeRecord, TranscriptEvent } from '../shared/bridge'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
 
@@ -119,6 +119,15 @@ async function deleteResume(id: string): Promise<void> {
   await coreApi(`/api/resumes/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+async function cancelAnswer(requestId: string): Promise<boolean> {
+  const body = await coreApi<{ cancelled: boolean }>('/api/answers/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId }),
+  })
+  return body.cancelled
+}
+
 async function updateResumeProject(id: string, patch: ResumeProjectPatch): Promise<ResumeProjectRecord> {
   return coreApi<ResumeProjectRecord>(`/api/resume-projects/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -153,6 +162,9 @@ function registerIpc(): void {
   ipcMain.handle('copilot:resume-activate', (_event, id: string) => activateResume(id))
   ipcMain.handle('copilot:resume-delete', (_event, id: string) => deleteResume(id))
   ipcMain.handle('copilot:resume-project-update', (_event, id: string, patch: ResumeProjectPatch) => updateResumeProject(id, patch))
+  ipcMain.handle('copilot:capture-start', (_event, options: CaptureOptions) => connection.startCapture(options))
+  ipcMain.handle('copilot:capture-stop', () => connection.stopCapture())
+  ipcMain.handle('copilot:answer-cancel', (_event, requestId: string) => cancelAnswer(requestId))
   ipcMain.handle('copilot:reconnect', async () => {
     runtime = readRuntimeFile()
     connection.setRuntime(runtime)
@@ -216,6 +228,9 @@ void app.whenReady().then(async () => {
 
   unsubscribeAnswer = connection.onAnswerEvent((event) => {
     mainWindow?.webContents.send('copilot:answer-event', event)
+  })
+  connection.onTranscriptEvent((event: TranscriptEvent) => {
+    mainWindow?.webContents.send('copilot:transcript-event', event)
   })
   connection.onChange((status) => {
     mainWindow?.webContents.send('copilot:core-status', status)
