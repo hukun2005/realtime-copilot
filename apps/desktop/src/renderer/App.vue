@@ -63,6 +63,30 @@ const audioTone = computed(() => {
 
 const modeLabel = computed(() => snapshot.value?.runtime.mode ?? '未知')
 
+const aiLabel = computed(() => {
+  const state = snapshot.value?.answer.state ?? 'UNKNOWN'
+  const labels: Record<string, string> = {
+    NOT_CONFIGURED: '未配置',
+    CONFIGURED: '已配置',
+    AVAILABLE: '可用',
+    AUTH_ERROR: 'API Key 无效',
+    PAYMENT_REQUIRED: '余额不足',
+    RATE_LIMITED: '限流',
+    TIMEOUT: '超时',
+    NETWORK_ERROR: '网络错误',
+    UPSTREAM_UNAVAILABLE: '服务不可用',
+    UNKNOWN: '未知',
+  }
+  return labels[state] ?? state
+})
+
+const aiTone = computed(() => {
+  const state = snapshot.value?.answer.state ?? 'UNKNOWN'
+  if (state === 'CONFIGURED' || state === 'AVAILABLE') return 'ok'
+  if (state === 'NOT_CONFIGURED' || state === 'UNKNOWN') return 'muted'
+  return 'bad'
+})
+
 const problems = computed(() => {
   const items: string[] = []
   if (error.value) items.push(error.value)
@@ -248,6 +272,17 @@ onUnmounted(() => {
           <dd>{{ snapshot?.core.serverVersion ?? '—' }}</dd>
           <dt>协议</dt>
           <dd>{{ snapshot?.core.protocol ?? '—' }}</dd>
+        </dl>
+      </article>
+
+      <article class="card" :data-tone="aiTone">
+        <h2>AI 服务</h2>
+        <p class="value">{{ aiLabel }}</p>
+        <dl>
+          <dt>模型</dt>
+          <dd>{{ snapshot?.answer.model ?? '—' }}</dd>
+          <dt>错误</dt>
+          <dd>{{ snapshot?.answer.lastError?.code ?? '—' }}</dd>
         </dl>
       </article>
 

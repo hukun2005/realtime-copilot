@@ -27,9 +27,18 @@ export interface AudioStatus {
   error: string | null
 }
 
+export interface AnswerStatus {
+  configured: boolean
+  state: string
+  model: string | null
+  lastError: { code: string; status: number | null; retryable: boolean } | null
+  error: string | null
+}
+
 export interface DesktopSnapshot {
   core: CoreStatus
   runtime: RuntimeSummary
   audio: AudioStatus
+  answer: AnswerStatus
   appVersion: string
 }

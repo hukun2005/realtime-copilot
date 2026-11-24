@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
+import type { AnswerStatus, AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
 import type { AnswerEvent, CaptureOptions, ResumeProjectPatch, ResumeProjectRecord, ResumeRecord, TranscriptEvent } from '../shared/bridge'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
@@ -61,11 +61,32 @@ async function readAudioStatus(): Promise<AudioStatus> {
   }
 }
 
+async function readAnswerStatus(): Promise<AnswerStatus> {
+  if (!runtime) {
+    return { configured: false, state: 'NOT_CONFIGURED', model: null, lastError: null, error: 'runtime.json not found' }
+  }
+  try {
+    const headers = { 'X-Copilot-Token': runtime.token }
+    const response = await fetch(`http://127.0.0.1:${runtime.port}/api/answer/status`, {
+      headers,
+      signal: AbortSignal.timeout(1500),
+    })
+    if (!response.ok) {
+      return { configured: false, state: 'UNKNOWN', model: null, lastError: null, error: `status ${response.status}` }
+    }
+    const body = (await response.json()) as Omit<AnswerStatus, 'error'>
+    return { ...body, error: null }
+  } catch (error) {
+    return { configured: false, state: 'UNKNOWN', model: null, lastError: null, error: describe(error) }
+  }
+}
+
 async function snapshot(): Promise<DesktopSnapshot> {
   return {
     core: connection.getStatus(),
     runtime: summarizeRuntime(),
     audio: await readAudioStatus(),
+    answer: await readAnswerStatus(),
     appVersion: app.getVersion(),
   }
 }
