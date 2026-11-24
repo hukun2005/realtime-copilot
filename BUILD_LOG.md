@@ -2001,7 +2001,17 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - 测试：402 不重试、429 重试成功、状态 API；全量 551 passed。
 - 真实 DeepSeek 仍 **FAILED/402**；未复测成功。
 
+## 2026-11-24 · P54-06：Mock E2E
+
+- 新增真实 uvicorn + WebSocket 的 Mock E2E：ASR final → QuestionEngine → Fake Runtime →
+  Publisher → answer.subscribe → answer.started/delta/completed。
+- 修复无采集会话时的非法 sessionId：`standalone` → `sess_standalone`（协议要求 sess_ 前缀）。
+- 测试中暴露 protocol requestId 最短长度问题并修正假数据，不放宽 Schema。
+- 真实 Electron→IPC→Vue 进程间 E2E 与真实 DeepSeek 仍未验证；DeepSeek 402。
+- 全量测试结果见下。
+
 ### 变更记录
+
 
 
 

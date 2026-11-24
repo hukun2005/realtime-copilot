@@ -100,7 +100,7 @@ def create_app(
             runtime = getattr(app.state, "answer_runtime", None)
             if runtime is None:
                 return
-            session_id = getattr(handler, "session_id", None) or "standalone"
+            session_id = getattr(handler, "session_id", None) or "sess_standalone"
             if not app.state.final_guard.accept(
                 event_id=str(wire.get("eventId") or ""),
                 session_id=session_id,
