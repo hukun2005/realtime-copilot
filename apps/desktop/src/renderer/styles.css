@@ -192,3 +192,14 @@ button.danger { border-color: #7f1d1d; color: #fca5a5; }
 .tabs button { background: #15171c; color: #cbd5e1; border: 1px solid #333842; border-radius: 6px; padding: 6px 10px; }
 .tabs button.active { border-color: #3b82f6; color: #fff; }
 .placeholder { border: 1px dashed #333842; border-radius: 8px; padding: 16px; margin-top: 12px; color: #9ca3af; }
+
+
+.answer-panel { border: 1px solid #2a4a6b; border-radius: 8px; padding: 12px; margin-top: 12px; background: #101a24; }
+.answer-text { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; background: #0b1117; padding: 10px; border-radius: 6px; }
+
+
+.capture-panel { border: 1px solid #2a2d35; border-radius: 8px; padding: 12px; margin-top: 12px; }
+.capture-actions { display: flex; gap: 8px; margin: 8px 0; }
+.transcript-list { list-style: none; padding: 0; max-height: 180px; overflow: auto; }
+.transcript-list li { padding: 4px 0; border-bottom: 1px dashed #2a2d35; }
+.transcript-list li[data-final='false'] { opacity: 0.65; }

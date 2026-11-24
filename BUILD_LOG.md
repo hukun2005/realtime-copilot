@@ -1982,7 +1982,38 @@ v4 存储/关联状态。Python **487 passed / 3 skipped**；ruff 通过。
 - Mock 集成：ASR→QuestionEngine→Runtime、RAG、SSE 栈、Publisher、WS 订阅均有测试。
 - 真实 DeepSeek→WS 端到端：**NOT_RUN**。
 
+## 2026-11-24 · P54-03/04：实时 UI 与生命周期
+
+- Core 新增 `POST /api/answers/cancel`（Token），只取消指定 request。
+- on_capture_stop 先 `answer_runtime.cancel_session(handler.session_id)`，再停 ASR/transcript。
+- CoreConnection 新增 capture.start/stop、ASR partial/final 转发、transcript IPC。
+- 桌面 bridge/preload 新增 startCapture/stopCapture/cancelAnswer/onTranscriptEvent。
+- App.vue 增加音频采集（loopback + mic 开关）、实时转写、问题/答案、停止生成；AnswerStore 记录 question。
+- 测试：cancel API 3 个；桌面 19；typecheck 通过。
+- **未验证**：真实麦克风/系统音频、真实 Core+Electron 联调、DeepSeek 402 仍失败。
+
+## 2026-11-24 · P54-05：DeepSeek 诊断与可靠性
+
+- LlmError 增加 code/status/retryable；401/402/403/404/429/5xx/超时/网络/非法响应分类。
+- DeepSeekClient 记录 last_error/last_success；complete 对 429/5xx/网络/超时做最多 3 次有界重试；401/402 不重试。
+- 新增 `GET /api/answer/status`（Token，不返回 Key）：NOT_CONFIGURED/CONFIGURED/payment_required 等。
+- 桌面 snapshot 增加 answer 状态；UI 显示 AI 状态（含“余额不足”）。
+- 测试：402 不重试、429 重试成功、状态 API；全量 551 passed。
+- 真实 DeepSeek 仍 **FAILED/402**；未复测成功。
+
+## 2026-11-24 · P54-06：Mock E2E
+
+- 新增真实 uvicorn + WebSocket 的 Mock E2E：ASR final → QuestionEngine → Fake Runtime →
+  Publisher → answer.subscribe → answer.started/delta/completed。
+- 修复无采集会话时的非法 sessionId：`standalone` → `sess_standalone`（协议要求 sess_ 前缀）。
+- 测试中暴露 protocol requestId 最短长度问题并修正假数据，不放宽 Schema。
+- 真实 Electron→IPC→Vue 进程间 E2E 与真实 DeepSeek 仍未验证；DeepSeek 402。
+- 全量测试结果见下。
+
 ### 变更记录
+
+
+
 
 
 

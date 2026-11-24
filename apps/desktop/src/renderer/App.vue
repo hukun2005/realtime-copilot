@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { DesktopSnapshot } from '../shared/status'
-import type { ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerEvent, ResumeProjectRecord, ResumeRecord, TranscriptEvent } from '../shared/bridge'
+import { AnswerStore, type AnswerSessionState } from './services/answer-store'
 
 const snapshot = ref<DesktopSnapshot | null>(null)
 const error = ref<string | null>(null)
@@ -19,6 +20,13 @@ const resumes = ref<ResumeRecord[]>([])
 const resumeError = ref<string | null>(null)
 const uploading = ref(false)
 const edits = ref<Record<string, { tech: string; github: string }>>({})
+const answerStore = new AnswerStore()
+const answerView = ref<AnswerSessionState | null>(null)
+const transcripts = ref<TranscriptEvent[]>([])
+const micEnabled = ref(false)
+const captureError = ref<string | null>(null)
+let unsubscribeTranscript: (() => void) | undefined
+let unsubscribeAnswer: (() => void) | undefined
 let refreshTimer: number | undefined
 let unsubscribe: (() => void) | undefined
 
@@ -55,6 +63,30 @@ const audioTone = computed(() => {
 
 const modeLabel = computed(() => snapshot.value?.runtime.mode ?? '未知')
 
+const aiLabel = computed(() => {
+  const state = snapshot.value?.answer.state ?? 'UNKNOWN'
+  const labels: Record<string, string> = {
+    NOT_CONFIGURED: '未配置',
+    CONFIGURED: '已配置',
+    AVAILABLE: '可用',
+    AUTH_ERROR: 'API Key 无效',
+    PAYMENT_REQUIRED: '余额不足',
+    RATE_LIMITED: '限流',
+    TIMEOUT: '超时',
+    NETWORK_ERROR: '网络错误',
+    UPSTREAM_UNAVAILABLE: '服务不可用',
+    UNKNOWN: '未知',
+  }
+  return labels[state] ?? state
+})
+
+const aiTone = computed(() => {
+  const state = snapshot.value?.answer.state ?? 'UNKNOWN'
+  if (state === 'CONFIGURED' || state === 'AVAILABLE') return 'ok'
+  if (state === 'NOT_CONFIGURED' || state === 'UNKNOWN') return 'muted'
+  return 'bad'
+})
+
 const problems = computed(() => {
   const items: string[] = []
   if (error.value) items.push(error.value)
@@ -76,6 +108,35 @@ async function refresh(): Promise<void> {
   }
 }
 
+
+
+async function startCapture(): Promise<void> {
+  captureError.value = null
+  try {
+    await window.copilot.startCapture({ loopback: true, mic: micEnabled.value })
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function stopCapture(): Promise<void> {
+  captureError.value = null
+  try {
+    await window.copilot.stopCapture()
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+async function cancelAnswer(): Promise<void> {
+  const requestId = answerView.value?.currentRequestId
+  if (!requestId) return
+  try {
+    await window.copilot.cancelAnswer(requestId)
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
 
 async function loadResumes(): Promise<void> {
   try {
@@ -157,6 +218,13 @@ onMounted(async () => {
       snapshot.value.core = status
     }
   })
+  unsubscribeTranscript = window.copilot.onTranscriptEvent((event) => {
+    transcripts.value = [...transcripts.value.slice(-49), event]
+  })
+  unsubscribeAnswer = window.copilot.onAnswerEvent((event: AnswerEvent) => {
+    answerStore.apply(event)
+    answerView.value = answerStore.session(event.sessionId)
+  })
   await refresh()
   await loadResumes()
   refreshTimer = window.setInterval(() => {
@@ -169,6 +237,8 @@ onUnmounted(() => {
     window.clearInterval(refreshTimer)
   }
   unsubscribe?.()
+  unsubscribeAnswer?.()
+  unsubscribeTranscript?.()
 })
 </script>
 
@@ -202,6 +272,17 @@ onUnmounted(() => {
           <dd>{{ snapshot?.core.serverVersion ?? '—' }}</dd>
           <dt>协议</dt>
           <dd>{{ snapshot?.core.protocol ?? '—' }}</dd>
+        </dl>
+      </article>
+
+      <article class="card" :data-tone="aiTone">
+        <h2>AI 服务</h2>
+        <p class="value">{{ aiLabel }}</p>
+        <dl>
+          <dt>模型</dt>
+          <dd>{{ snapshot?.answer.model ?? '—' }}</dd>
+          <dt>错误</dt>
+          <dd>{{ snapshot?.answer.lastError?.code ?? '—' }}</dd>
         </dl>
       </article>
 
@@ -252,6 +333,31 @@ onUnmounted(() => {
       <p v-else-if="activeView === 'analysis'">代码分析页面将在后续批次接入；当前后端已完成 Tree/静态分析。</p>
       <p v-else-if="activeView === 'knowledge'">知识库检索页面将在后续批次接入；当前 FTS5 已完成。</p>
       <p v-else>面试设置与悬浮窗将在后续批次接入。</p>
+    </section>
+
+    <section v-if="activeView === 'dashboard'" class="capture-panel">
+      <h2>音频采集</h2>
+      <label><input v-model="micEnabled" type="checkbox" /> 同时采集麦克风</label>
+      <div class="capture-actions">
+        <button type="button" @click="startCapture">开始采集</button>
+        <button type="button" @click="stopCapture">停止采集</button>
+      </div>
+      <p v-if="captureError" class="resume-error">{{ captureError }}</p>
+      <ul class="transcript-list">
+        <li v-for="(item, index) in transcripts" :key="index" :data-final="item.isFinal">
+          <span class="muted">{{ item.source }} · {{ item.isFinal ? 'final' : 'partial' }}</span>
+          {{ item.text }}
+        </li>
+      </ul>
+    </section>
+
+    <section v-if="activeView === 'dashboard'" class="answer-panel">
+      <h2>AI 实时回答</h2>
+      <p class="muted">状态：{{ answerView?.state ?? 'idle' }}</p>
+      <p><strong>问题：</strong>{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.question || '等待问题…' }}</p>
+      <pre class="answer-text">{{ answerView?.requests.get(answerView.currentRequestId ?? '')?.text ?? '等待回答…' }}</pre>
+      <button type="button" :disabled="!answerView?.currentRequestId" @click="cancelAnswer">停止生成</button>
+      <button type="button" @click="answerView = null">清空显示</button>
     </section>
 
     <section v-if="activeView === 'dashboard' && problems.length > 0" class="problems">

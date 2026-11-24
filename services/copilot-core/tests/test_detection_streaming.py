@@ -81,7 +81,8 @@ async def test_stream_http_error_does_not_leak_key() -> None:
     with pytest.raises(LlmError) as error:
         [chunk async for chunk in client.stream([{"role": "user", "content": "hi"}])]
     assert "secret-key" not in str(error.value)
-    assert "401" in str(error.value)
+    assert error.value.status == 401
+    assert error.value.code == "auth_error"
     await client.close()
 
 

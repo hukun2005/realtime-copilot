@@ -31,7 +31,27 @@ class LlmNotConfigured(RuntimeError):
 
 
 class LlmError(RuntimeError):
-    pass
+    def __init__(self, code: str, *, status: int | None = None, retryable: bool = False) -> None:
+        super().__init__(code)
+        self.code = code
+        self.status = status
+        self.retryable = retryable
+
+
+def _http_error(status: int) -> LlmError:
+    if status == 401:
+        return LlmError("auth_error", status=status)
+    if status == 402:
+        return LlmError("payment_required", status=status)
+    if status == 403:
+        return LlmError("forbidden", status=status)
+    if status == 404:
+        return LlmError("not_found", status=status)
+    if status == 429:
+        return LlmError("rate_limited", status=status, retryable=True)
+    if status >= 500:
+        return LlmError("upstream_unavailable", status=status, retryable=True)
+    return LlmError("request_error", status=status)
 
 
 class DeepSeekClient:
@@ -50,6 +70,8 @@ class DeepSeekClient:
         self.base_url = (base_url or os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
         self.model = model or os.environ.get("DEEPSEEK_MODEL") or DEFAULT_MODEL
         self._client = httpx.AsyncClient(transport=transport, timeout=timeout)
+        self.last_error: LlmError | None = None
+        self.last_success = False
 
     async def __aenter__(self) -> DeepSeekClient:
         return self
@@ -85,7 +107,9 @@ class DeepSeekClient:
                 json=payload,
             ) as response:
                 if response.status_code >= 400:
-                    raise LlmError(f"DeepSeek HTTP {response.status_code}")
+                    error = _http_error(response.status_code)
+                    self.last_error = error
+                    raise error
                 data_lines: list[str] = []
                 async for line in response.aiter_lines():
                     if line == "":
@@ -106,14 +130,20 @@ class DeepSeekClient:
                     content = _parse_sse_data("\n".join(data_lines))
                     if content and content != "__DONE__":
                         yield content
+                self.last_error = None
+                self.last_success = True
         except LlmError:
             raise
         except asyncio.CancelledError:
             raise
         except TimeoutError as error:
-            raise LlmError("DeepSeek stream timed out") from error
+            failure = LlmError("timeout", retryable=True)
+            self.last_error = failure
+            raise failure from error
         except Exception as error:
-            raise LlmError(f"DeepSeek stream failed: {type(error).__name__}") from error
+            failure = LlmError("network_error", retryable=True)
+            self.last_error = failure
+            raise failure from error
 
     async def health_check(self) -> bool:
         try:
@@ -142,18 +172,40 @@ class DeepSeekClient:
             "max_tokens": max_tokens,
             "thinking": {"type": "disabled"},
         }
-        try:
-            response = await self._client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json=payload,
-            )
-            response.raise_for_status()
-            body: dict[str, Any] = response.json()
-            return str(body["choices"][0]["message"]["content"]).strip()
-        except Exception as error:
-            raise LlmError(f"DeepSeek request failed: {type(error).__name__}") from error
-
+        for attempt in range(3):
+            try:
+                response = await self._client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                body: dict[str, Any] = response.json()
+                text = str(body["choices"][0]["message"]["content"]).strip()
+                self.last_error = None
+                self.last_success = True
+                return text
+            except httpx.HTTPStatusError as error:
+                failure = _http_error(error.response.status_code)
+            except httpx.TimeoutException as error:
+                failure = LlmError("timeout", retryable=True)
+                self.last_error = failure
+                raise failure from error
+            except httpx.HTTPError as error:
+                failure = LlmError("network_error", retryable=True)
+                self.last_error = failure
+                raise failure from error
+            except LlmError:
+                raise
+            except Exception as error:
+                failure = LlmError("invalid_response")
+                self.last_error = failure
+                raise failure from error
+            if not failure.retryable or attempt == 2:
+                self.last_error = failure
+                raise failure
+            await asyncio.sleep(0.2 * (2 ** attempt))
+        raise LlmError("retry_exhausted")
 
 @dataclass
 class DeepSeekReviewer:

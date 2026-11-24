@@ -71,3 +71,37 @@ def test_parse_review_invalid_json_returns_none() -> None:
 def test_missing_key_raises() -> None:
     with pytest.raises(LlmNotConfigured):
         DeepSeekClient(api_key="")
+
+
+async def test_complete_does_not_retry_402() -> None:
+    calls = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(402)
+
+    client = DeepSeekClient(api_key="test", transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(Exception) as error:
+            await client.complete([{"role": "user", "content": "x"}])
+        assert getattr(error.value, "code", None) == "payment_required"
+        assert len(calls) == 1
+    finally:
+        await client.close()
+
+
+async def test_complete_retries_429_then_succeeds() -> None:
+    calls = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) < 3:
+            return httpx.Response(429)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = DeepSeekClient(api_key="test", transport=httpx.MockTransport(handler))
+    try:
+        assert await client.complete([{"role": "user", "content": "x"}]) == "ok"
+        assert len(calls) == 3
+    finally:
+        await client.close()

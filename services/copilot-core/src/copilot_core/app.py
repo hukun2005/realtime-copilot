@@ -100,7 +100,7 @@ def create_app(
             runtime = getattr(app.state, "answer_runtime", None)
             if runtime is None:
                 return
-            session_id = getattr(handler, "session_id", None) or "standalone"
+            session_id = getattr(handler, "session_id", None) or "sess_standalone"
             if not app.state.final_guard.accept(
                 event_id=str(wire.get("eventId") or ""),
                 session_id=session_id,
@@ -235,6 +235,13 @@ def create_app(
             await asr_coordinator.start(generation)
 
     async def on_capture_stop() -> None:
+        handler = getattr(app.state, "transcript_handler", None)
+        runtime = getattr(app.state, "answer_runtime", None)
+        if runtime is not None and handler is not None and handler.session_id is not None:
+            try:
+                await runtime.cancel_session(handler.session_id)
+            except Exception:
+                logger.exception("answer session cancel failed")
         try:
             if asr_coordinator is not None:
                 await asr_coordinator.stop()
@@ -309,6 +316,29 @@ def create_app(
     async def require_resume_token(x_copilot_token: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_copilot_token, token):
             raise HTTPException(status_code=401, detail="unauthorized")
+
+    @app.get("/api/answer/status")
+    def answer_status(_: None = Depends(require_resume_token)) -> dict[str, Any]:
+        stack = getattr(app.state, "answer_stack", None)
+        if stack is None:
+            return {"configured": False, "state": "NOT_CONFIGURED", "model": None, "lastError": None}
+        error = stack.client.last_error
+        return {
+            "configured": True,
+            "state": error.code.upper() if error is not None else "CONFIGURED",
+            "model": stack.client.model,
+            "lastError": None if error is None else {"code": error.code, "status": error.status, "retryable": error.retryable},
+        }
+
+    @app.post("/api/answers/cancel")
+    async def cancel_answer(payload: dict[str, Any], _: None = Depends(require_resume_token)) -> dict[str, bool]:
+        request_id = str(payload.get("requestId") or "").strip()
+        if not request_id:
+            raise HTTPException(status_code=400, detail="request_id_required")
+        runtime = getattr(app.state, "answer_runtime", None)
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="answer_runtime_not_configured")
+        return {"cancelled": await runtime.cancel(request_id, reason="user_cancelled")}
 
     @app.get("/api/knowledge/search")
     def search_knowledge(

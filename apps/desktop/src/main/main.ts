@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
-import type { ResumeProjectPatch, ResumeProjectRecord, ResumeRecord } from '../shared/bridge'
+import type { AnswerStatus, AudioStatus, CoreStatus, DesktopSnapshot, RuntimeSummary } from '../shared/status'
+import type { AnswerEvent, CaptureOptions, ResumeProjectPatch, ResumeProjectRecord, ResumeRecord, TranscriptEvent } from '../shared/bridge'
 import { CoreConnection } from './core-connection'
 import { readRuntimeFile, resolveRuntimePath, type RuntimeFile } from './runtime-file'
 
@@ -25,6 +25,7 @@ let mainWindow: BrowserWindow | null = null
 let runtime: RuntimeFile | null = null
 let rendererLoaded = false
 let smokeFinished = false
+let unsubscribeAnswer: (() => void) | null = null
 
 function summarizeRuntime(): RuntimeSummary {
   return {
@@ -60,11 +61,32 @@ async function readAudioStatus(): Promise<AudioStatus> {
   }
 }
 
+async function readAnswerStatus(): Promise<AnswerStatus> {
+  if (!runtime) {
+    return { configured: false, state: 'NOT_CONFIGURED', model: null, lastError: null, error: 'runtime.json not found' }
+  }
+  try {
+    const headers = { 'X-Copilot-Token': runtime.token }
+    const response = await fetch(`http://127.0.0.1:${runtime.port}/api/answer/status`, {
+      headers,
+      signal: AbortSignal.timeout(1500),
+    })
+    if (!response.ok) {
+      return { configured: false, state: 'UNKNOWN', model: null, lastError: null, error: `status ${response.status}` }
+    }
+    const body = (await response.json()) as Omit<AnswerStatus, 'error'>
+    return { ...body, error: null }
+  } catch (error) {
+    return { configured: false, state: 'UNKNOWN', model: null, lastError: null, error: describe(error) }
+  }
+}
+
 async function snapshot(): Promise<DesktopSnapshot> {
   return {
     core: connection.getStatus(),
     runtime: summarizeRuntime(),
     audio: await readAudioStatus(),
+    answer: await readAnswerStatus(),
     appVersion: app.getVersion(),
   }
 }
@@ -118,6 +140,15 @@ async function deleteResume(id: string): Promise<void> {
   await coreApi(`/api/resumes/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+async function cancelAnswer(requestId: string): Promise<boolean> {
+  const body = await coreApi<{ cancelled: boolean }>('/api/answers/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId }),
+  })
+  return body.cancelled
+}
+
 async function updateResumeProject(id: string, patch: ResumeProjectPatch): Promise<ResumeProjectRecord> {
   return coreApi<ResumeProjectRecord>(`/api/resume-projects/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -152,6 +183,9 @@ function registerIpc(): void {
   ipcMain.handle('copilot:resume-activate', (_event, id: string) => activateResume(id))
   ipcMain.handle('copilot:resume-delete', (_event, id: string) => deleteResume(id))
   ipcMain.handle('copilot:resume-project-update', (_event, id: string, patch: ResumeProjectPatch) => updateResumeProject(id, patch))
+  ipcMain.handle('copilot:capture-start', (_event, options: CaptureOptions) => connection.startCapture(options))
+  ipcMain.handle('copilot:capture-stop', () => connection.stopCapture())
+  ipcMain.handle('copilot:answer-cancel', (_event, requestId: string) => cancelAnswer(requestId))
   ipcMain.handle('copilot:reconnect', async () => {
     runtime = readRuntimeFile()
     connection.setRuntime(runtime)
@@ -213,6 +247,12 @@ void app.whenReady().then(async () => {
     void maybeFinishSmoke()
   })
 
+  unsubscribeAnswer = connection.onAnswerEvent((event) => {
+    mainWindow?.webContents.send('copilot:answer-event', event)
+  })
+  connection.onTranscriptEvent((event: TranscriptEvent) => {
+    mainWindow?.webContents.send('copilot:transcript-event', event)
+  })
   connection.onChange((status) => {
     mainWindow?.webContents.send('copilot:core-status', status)
     void maybeFinishSmoke()
@@ -223,6 +263,8 @@ void app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  unsubscribeAnswer?.()
+  unsubscribeAnswer = null
   connection.disconnect()
   app.quit()
 })
